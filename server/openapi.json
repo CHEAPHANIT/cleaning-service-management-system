@@ -1,0 +1,260 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CleanNow API",
+    "version": "1.0.0",
+    "description": "REST API for CleanNow authentication, services, bookings, cleaners, favorites, reviews, notifications, addresses, and products. Use the demo accounts documented in the project README to try role-specific flows."
+  },
+  "servers": [
+    { "url": "/api", "description": "Current CleanNow server" }
+  ],
+  "tags": [
+    { "name": "System" },
+    { "name": "Authentication" },
+    { "name": "Users" },
+    { "name": "Services" },
+    { "name": "Bookings" },
+    { "name": "Notifications" },
+    { "name": "Favorites" },
+    { "name": "Addresses" },
+    { "name": "Reviews" },
+    { "name": "Products" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["System"], "summary": "Check API health", "operationId": "getHealth",
+        "responses": { "200": { "description": "API and database are available", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } } } }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": ["Authentication"], "summary": "Register a customer", "operationId": "register",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterRequest" }, "example": { "full_name": "Dara Sok", "email": "dara@example.com", "phone": "+855 12 345 678", "password": "secret123" } } } },
+        "responses": {
+          "201": { "$ref": "#/components/responses/UserResponse" },
+          "409": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Authentication"], "summary": "Log in", "operationId": "login",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" }, "example": { "email": "cleaner@cleannow.demo", "password": "demo123" } } } },
+        "responses": { "200": { "$ref": "#/components/responses/UserResponse" }, "401": { "$ref": "#/components/responses/ErrorResponse" } }
+      }
+    },
+    "/auth/reset-password": {
+      "post": {
+        "tags": ["Authentication"], "summary": "Request a password reset", "operationId": "resetPassword",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["email"], "properties": { "email": { "type": "string", "format": "email" } } } } } },
+        "responses": { "200": { "description": "Reset request accepted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Message" } } } }, "404": { "$ref": "#/components/responses/ErrorResponse" } }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["Users"], "summary": "List users", "operationId": "listUsers",
+        "responses": { "200": { "description": "Users", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/User" } } } } } }
+      }
+    },
+    "/users/upsert": {
+      "post": {
+        "tags": ["Users"], "summary": "Create or update a user by Firebase UID", "operationId": "upsertUser",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserUpsertRequest" } } } },
+        "responses": { "200": { "$ref": "#/components/responses/UserResponse" } }
+      }
+    },
+    "/users/{userId}": {
+      "delete": {
+        "tags": ["Users"], "summary": "Deactivate a user", "operationId": "deleteUser",
+        "parameters": [{ "$ref": "#/components/parameters/UserId" }],
+        "responses": { "200": { "$ref": "#/components/responses/DeletedResponse" }, "400": { "$ref": "#/components/responses/ErrorResponse" } }
+      }
+    },
+    "/services": {
+      "get": {
+        "tags": ["Services"], "summary": "List cleaning services", "operationId": "listServices",
+        "responses": { "200": { "description": "Services", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Service" } } } } } }
+      },
+      "post": {
+        "tags": ["Services"], "summary": "Create or update a service", "operationId": "upsertService",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ServiceInput" } } } },
+        "responses": { "200": { "description": "Saved service", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Service" } } } } }
+      }
+    },
+    "/services/{serviceId}": {
+      "delete": {
+        "tags": ["Services"], "summary": "Deactivate a service", "operationId": "deleteService",
+        "parameters": [{ "$ref": "#/components/parameters/ServiceId" }],
+        "responses": { "200": { "$ref": "#/components/responses/DeletedResponse" }, "400": { "$ref": "#/components/responses/ErrorResponse" } }
+      }
+    },
+    "/bookings": {
+      "get": {
+        "tags": ["Bookings"], "summary": "List bookings", "description": "Optionally filter by customer or cleaner. If both are supplied, user_id takes precedence.", "operationId": "listBookings",
+        "parameters": [
+          { "name": "user_id", "in": "query", "schema": { "type": "integer" }, "description": "Customer user ID" },
+          { "name": "cleaner_id", "in": "query", "schema": { "type": "integer" }, "description": "Cleaner user ID" }
+        ],
+        "responses": { "200": { "description": "Bookings newest first", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Booking" } } } } } }
+      },
+      "post": {
+        "tags": ["Bookings"], "summary": "Create a booking", "operationId": "createBooking",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BookingInput" } } } },
+        "responses": { "201": { "description": "Created booking", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Booking" } } } } }
+      }
+    },
+    "/bookings/{bookingId}/status": {
+      "patch": {
+        "tags": ["Bookings"], "summary": "Advance or cancel a booking", "operationId": "updateBookingStatus",
+        "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["status"], "properties": { "status": { "$ref": "#/components/schemas/BookingStatus" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/BookingResponse" }, "404": { "$ref": "#/components/responses/ErrorResponse" }, "409": { "$ref": "#/components/responses/ErrorResponse" } }
+      }
+    },
+    "/bookings/{bookingId}/documentation": {
+      "patch": {
+        "tags": ["Bookings"], "summary": "Save cleaner task documentation", "operationId": "updateBookingDocumentation",
+        "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "before_photos": { "$ref": "#/components/schemas/StringList" }, "after_photos": { "$ref": "#/components/schemas/StringList" }, "completion_notes": { "type": "string" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/BookingResponse" }, "404": { "$ref": "#/components/responses/ErrorResponse" } }
+      }
+    },
+    "/bookings/{bookingId}/assign": {
+      "patch": {
+        "tags": ["Bookings"], "summary": "Assign an available cleaner", "operationId": "assignCleaner",
+        "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["cleaner_id", "cleaner_name"], "properties": { "cleaner_id": { "type": "integer" }, "cleaner_name": { "type": "string" }, "cleaner_pay": { "type": "number", "format": "double", "default": 0 } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/BookingResponse" }, "404": { "$ref": "#/components/responses/ErrorResponse" }, "409": { "$ref": "#/components/responses/ErrorResponse" } }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "tags": ["Notifications"], "summary": "List a user's notifications", "operationId": "listNotifications",
+        "parameters": [{ "$ref": "#/components/parameters/RequiredUserIdQuery" }],
+        "responses": { "200": { "description": "Notifications newest first", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Notification" } } } } } }
+      }
+    },
+    "/notifications/read-all": {
+      "patch": {
+        "tags": ["Notifications"], "summary": "Mark all notifications as read", "operationId": "readAllNotifications",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserIdBody" } } } },
+        "responses": { "200": { "description": "Updated", "content": { "application/json": { "schema": { "type": "object", "properties": { "updated": { "type": "boolean" } } } } } } }
+      }
+    },
+    "/favorites": {
+      "get": {
+        "tags": ["Favorites"], "summary": "List a user's favorite services", "operationId": "listFavorites",
+        "parameters": [{ "$ref": "#/components/parameters/RequiredUserIdQuery" }],
+        "responses": { "200": { "description": "Favorites", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Favorite" } } } } } }
+      }
+    },
+    "/favorites/toggle": {
+      "post": {
+        "tags": ["Favorites"], "summary": "Add or remove a favorite", "operationId": "toggleFavorite",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FavoriteInput" } } } },
+        "responses": { "200": { "description": "Resulting favorite state", "content": { "application/json": { "schema": { "type": "object", "properties": { "favorite": { "type": "boolean" } } } } } } }
+      }
+    },
+    "/addresses": {
+      "get": {
+        "tags": ["Addresses"], "summary": "List a user's addresses", "operationId": "listAddresses",
+        "parameters": [{ "$ref": "#/components/parameters/RequiredUserIdQuery" }],
+        "responses": { "200": { "description": "Default address first", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Address" } } } } } }
+      }
+    },
+    "/addresses/replace": {
+      "post": {
+        "tags": ["Addresses"], "summary": "Replace all addresses for a user", "operationId": "replaceAddresses",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["user_id", "addresses"], "properties": { "user_id": { "type": "integer" }, "addresses": { "type": "array", "items": { "$ref": "#/components/schemas/AddressInput" } } } } } } },
+        "responses": { "200": { "description": "Saved addresses", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Address" } } } } } }
+      }
+    },
+    "/reviews": {
+      "post": {
+        "tags": ["Reviews"], "summary": "Create or update a booking review", "operationId": "upsertReview",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReviewInput" } } } },
+        "responses": { "200": { "description": "Saved review", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Review" } } } } }
+      }
+    },
+    "/reviews/booking/{bookingId}": {
+      "get": {
+        "tags": ["Reviews"], "summary": "Get the review for a booking", "operationId": "getBookingReview",
+        "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+        "responses": { "200": { "description": "Review", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Review" } } } }, "404": { "$ref": "#/components/responses/ErrorResponse" } }
+      }
+    },
+    "/products": {
+      "get": {
+        "tags": ["Products"], "summary": "List cached cleaning products", "description": "Seeds the cache from DummyJSON, or local fallback products, when empty.", "operationId": "listProducts",
+        "responses": { "200": { "description": "Products", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } } } } } }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "UserId": { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } },
+      "ServiceId": { "name": "serviceId", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } },
+      "BookingId": { "name": "bookingId", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } },
+      "RequiredUserIdQuery": { "name": "user_id", "in": "query", "required": true, "schema": { "type": "integer", "minimum": 1 } }
+    },
+    "responses": {
+      "ErrorResponse": { "description": "Request failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "UserResponse": { "description": "User", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } },
+      "BookingResponse": { "description": "Updated booking", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Booking" } } } },
+      "DeletedResponse": { "description": "Deactivated", "content": { "application/json": { "schema": { "type": "object", "properties": { "deleted": { "type": "boolean" } } } } } }
+    },
+    "schemas": {
+      "Health": { "type": "object", "required": ["status", "database"], "properties": { "status": { "type": "string", "example": "ok" }, "database": { "type": "string" } } },
+      "Error": { "type": "object", "required": ["error"], "properties": { "error": { "type": "string" } } },
+      "Message": { "type": "object", "properties": { "message": { "type": "string" } } },
+      "UserIdBody": { "type": "object", "required": ["user_id"], "properties": { "user_id": { "type": "integer", "minimum": 1 } } },
+      "StringList": { "type": "array", "items": { "type": "string" } },
+      "LoginRequest": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "format": "password" } } },
+      "RegisterRequest": { "allOf": [{ "$ref": "#/components/schemas/LoginRequest" }, { "type": "object", "required": ["full_name", "phone"], "properties": { "full_name": { "type": "string" }, "phone": { "type": "string" } } }] },
+      "UserUpsertRequest": {
+        "type": "object", "required": ["firebase_uid"],
+        "properties": {
+          "firebase_uid": { "type": "string" }, "full_name": { "type": "string" }, "email": { "type": "string", "format": "email" }, "phone": { "type": "string" },
+          "role": { "type": "string", "enum": ["customer", "cleaner", "admin"], "default": "customer" }, "address": { "type": "string" }, "hourly_rate": { "type": "number", "format": "double", "default": 8 },
+          "is_active": { "type": "integer", "enum": [0, 1], "default": 1 }, "availability_status": { "type": "string", "enum": ["Available", "Busy", "Off Duty"], "default": "Available" }, "password": { "type": "string", "format": "password" }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" }, "firebase_uid": { "type": "string" }, "full_name": { "type": "string" }, "email": { "type": "string", "format": "email" }, "phone": { "type": "string" },
+          "role": { "type": "string", "enum": ["customer", "cleaner", "admin"] }, "address": { "type": "string" }, "hourly_rate": { "type": "number", "format": "double" }, "is_active": { "type": "integer", "enum": [0, 1] },
+          "availability_status": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ServiceInput": {
+        "type": "object", "required": ["name", "category", "description", "base_price", "duration_minutes", "image_url"],
+        "properties": { "id": { "type": "integer", "description": "Omit or use 0 to create the next ID" }, "name": { "type": "string" }, "category": { "type": "string" }, "description": { "type": "string" }, "base_price": { "type": "number" }, "duration_minutes": { "type": "integer" }, "image_url": { "type": "string", "format": "uri" }, "rating": { "type": "number", "default": 0 }, "cleaners_required": { "type": "integer", "default": 1 }, "is_active": { "type": "integer", "enum": [0, 1], "default": 1 } }
+      },
+      "Service": { "allOf": [{ "$ref": "#/components/schemas/ServiceInput" }, { "type": "object", "required": ["id"], "properties": { "id": { "type": "integer" } } }] },
+      "BookingStatus": { "type": "string", "enum": ["Pending", "Accepted", "Cleaner Assigned", "On the Way", "Arrived", "In Progress", "Completed", "Cancelled", "Rejected"] },
+      "BookingInput": {
+        "type": "object",
+        "required": ["user_id", "service_id", "service_name", "customer_name", "phone", "address", "property_type", "rooms", "bathrooms", "booking_date", "booking_time", "payment_method", "base_price", "extra_price", "total_price", "estimated_duration", "status"],
+        "properties": {
+          "user_id": { "type": "integer" }, "service_id": { "type": "integer" }, "service_name": { "type": "string" }, "customer_name": { "type": "string" }, "phone": { "type": "string" }, "address": { "type": "string" },
+          "property_type": { "type": "string" }, "rooms": { "type": "integer" }, "bathrooms": { "type": "integer" }, "booking_date": { "type": "string", "format": "date" }, "booking_time": { "type": "string", "example": "09:00" },
+          "extra_services": { "oneOf": [{ "$ref": "#/components/schemas/StringList" }, { "type": "string", "description": "JSON-encoded array" }] }, "special_instruction": { "type": "string" }, "payment_method": { "type": "string" },
+          "base_price": { "type": "number" }, "extra_price": { "type": "number" }, "total_price": { "type": "number" }, "estimated_duration": { "type": "integer", "description": "Minutes" },
+          "cleaner_id": { "type": "integer", "nullable": true }, "cleaner_name": { "type": "string" }, "cleaner_pay": { "type": "number" }, "status": { "$ref": "#/components/schemas/BookingStatus" }, "service_image": { "type": "string" },
+          "before_photos": { "oneOf": [{ "$ref": "#/components/schemas/StringList" }, { "type": "string" }] }, "after_photos": { "oneOf": [{ "$ref": "#/components/schemas/StringList" }, { "type": "string" }] }, "completion_notes": { "type": "string" }
+        }
+      },
+      "Booking": { "allOf": [{ "$ref": "#/components/schemas/BookingInput" }, { "type": "object", "properties": { "id": { "type": "integer" }, "extra_services": { "type": "string", "description": "JSON-encoded array" }, "before_photos": { "type": "string", "description": "JSON-encoded array" }, "after_photos": { "type": "string", "description": "JSON-encoded array" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } }] },
+      "Notification": { "type": "object", "properties": { "id": { "type": "integer" }, "user_id": { "type": "integer" }, "title": { "type": "string" }, "message": { "type": "string" }, "is_read": { "type": "integer", "enum": [0, 1] }, "created_at": { "type": "string", "format": "date-time" } } },
+      "FavoriteInput": { "type": "object", "required": ["user_id", "service_id", "service_name", "service_image", "service_price"], "properties": { "user_id": { "type": "integer" }, "service_id": { "type": "integer" }, "service_name": { "type": "string" }, "service_image": { "type": "string" }, "service_price": { "type": "number" } } },
+      "Favorite": { "allOf": [{ "$ref": "#/components/schemas/FavoriteInput" }, { "type": "object", "properties": { "id": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" } } }] },
+      "AddressInput": { "type": "object", "required": ["title", "address"], "properties": { "title": { "type": "string" }, "address": { "type": "string" }, "is_default": { "type": "boolean", "default": false } } },
+      "Address": { "type": "object", "properties": { "id": { "type": "integer" }, "user_id": { "type": "integer" }, "title": { "type": "string" }, "address": { "type": "string" }, "is_default": { "type": "integer", "enum": [0, 1] }, "created_at": { "type": "string", "format": "date-time" } } },
+      "ReviewInput": { "type": "object", "required": ["booking_id", "service_id", "user_id", "rating"], "properties": { "booking_id": { "type": "integer" }, "service_id": { "type": "integer" }, "user_id": { "type": "integer" }, "rating": { "type": "integer", "minimum": 1, "maximum": 5 }, "comment": { "type": "string" } } },
+      "Review": { "allOf": [{ "$ref": "#/components/schemas/ReviewInput" }, { "type": "object", "properties": { "id": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" } } }] },
+      "Product": { "type": "object", "properties": { "id": { "type": "integer" }, "api_id": { "type": "integer" }, "title": { "type": "string" }, "description": { "type": "string" }, "price": { "type": "number" }, "image_url": { "type": "string" }, "category": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } }
+    }
+  }
+}
