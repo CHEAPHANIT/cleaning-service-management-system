@@ -14,6 +14,7 @@ class DatabaseHelper {
   static const _webUsersKey = 'cleannow_web_users';
   static const _webBookingsKey = 'cleannow_web_bookings';
   static const _webNotificationsKey = 'cleannow_web_notifications';
+  static const _webCleanerApplicationsKey = 'cleannow_web_cleaner_applications';
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   factory DatabaseHelper({bool enableApi = false}) {
     if (enableApi) _instance._apiEnabled = true;
@@ -29,6 +30,7 @@ class DatabaseHelper {
   final List<FavoriteModel> _webFavorites = [];
   final List<ReviewModel> _webReviews = [];
   final List<NotificationModel> _webNotifications = [];
+  final List<CleanerApplicationModel> _webCleanerApplications = [];
   final List<ProductModel> _webProducts = [];
   final List<ServiceModel> _webServices = List.of(seedServices);
   int _webUserId = 1;
@@ -37,6 +39,7 @@ class DatabaseHelper {
   int _webFavoriteId = 1;
   int _webReviewId = 1;
   int _webNotificationId = 1;
+  int _webCleanerApplicationId = 1;
   bool _webSyncInProgress = false;
 
   Future<void> initialize() async {
@@ -44,6 +47,7 @@ class DatabaseHelper {
       await _loadWebUsers();
       await _loadWebBookings();
       await _loadWebNotifications();
+      await _loadWebCleanerApplications();
       await _seedWebUsers();
       return;
     }
@@ -56,7 +60,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'cleannow.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _create,
       onUpgrade: _upgrade,
       onOpen: (db) async {
@@ -68,7 +72,10 @@ class DatabaseHelper {
 
   Future<void> _create(Database db, int version) async {
     await db.execute(
-      'CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, firebase_uid TEXT UNIQUE, full_name TEXT, email TEXT, phone TEXT, role TEXT DEFAULT "customer", address TEXT, hourly_rate REAL DEFAULT 8, is_active INTEGER DEFAULT 1, availability_status TEXT DEFAULT "Available", created_at TEXT, updated_at TEXT)',
+      'CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, firebase_uid TEXT UNIQUE, full_name TEXT, email TEXT, phone TEXT, role TEXT DEFAULT "customer", address TEXT, hourly_rate REAL DEFAULT 8, is_active INTEGER DEFAULT 1, status TEXT DEFAULT "active", availability_status TEXT DEFAULT "Available", created_at TEXT, updated_at TEXT)',
+    );
+    await db.execute(
+      'CREATE TABLE cleaner_applications(id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT, email TEXT, phone TEXT, gender TEXT, address TEXT, work_experience TEXT, skills TEXT, available_days TEXT, available_time TEXT, profile_photo TEXT, id_document TEXT, status TEXT DEFAULT "pending", admin_note TEXT, user_id INTEGER, created_at TEXT, updated_at TEXT)',
     );
     await db.execute(
       'CREATE TABLE services(id INTEGER PRIMARY KEY, name TEXT, category TEXT, description TEXT, base_price REAL, duration_minutes INTEGER, image_url TEXT, rating REAL, cleaners_required INTEGER, is_active INTEGER)',
@@ -137,6 +144,15 @@ class DatabaseHelper {
       );
       await db.execute(
         'UPDATE users SET availability_status = "Off Duty" WHERE is_active = 0',
+      );
+    }
+    if (oldVersion < 6) {
+      await _addColumnIfMissing(db, 'users', 'status', 'TEXT DEFAULT "active"');
+      await db.execute(
+        'UPDATE users SET status = CASE WHEN is_active = 1 THEN "active" ELSE "inactive" END WHERE status IS NULL OR status = ""',
+      );
+      await db.execute(
+        'CREATE TABLE IF NOT EXISTS cleaner_applications(id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT, email TEXT, phone TEXT, gender TEXT, address TEXT, work_experience TEXT, skills TEXT, available_days TEXT, available_time TEXT, profile_photo TEXT, id_document TEXT, status TEXT DEFAULT "pending", admin_note TEXT, user_id INTEGER, created_at TEXT, updated_at TEXT)',
       );
     }
   }
@@ -310,6 +326,45 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> _loadWebCleanerApplications() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_webCleanerApplicationsKey);
+    if (stored == null || stored.isEmpty) {
+      _webCleanerApplications.clear();
+      _webCleanerApplicationId = 1;
+      return;
+    }
+    try {
+      final decoded = jsonDecode(stored) as List<dynamic>;
+      _webCleanerApplications
+        ..clear()
+        ..addAll(
+          decoded.map(
+            (item) => CleanerApplicationModel.fromJson(
+              Map<String, dynamic>.from(item as Map<dynamic, dynamic>),
+            ),
+          ),
+        );
+      _webCleanerApplicationId =
+          _webCleanerApplications.fold<int>(
+            0,
+            (largest, item) => (item.id ?? 0) > largest ? item.id! : largest,
+          ) +
+          1;
+    } catch (_) {
+      _webCleanerApplications.clear();
+      _webCleanerApplicationId = 1;
+    }
+  }
+
+  Future<void> _saveWebCleanerApplications() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _webCleanerApplicationsKey,
+      jsonEncode(_webCleanerApplications.map((item) => item.toJson()).toList()),
+    );
+  }
+
   Future<bool> syncWebData() async {
     if (!kIsWeb) return false;
     if (_webSyncInProgress) return false;
@@ -339,6 +394,28 @@ class DatabaseHelper {
   }
 
   static final seedUsers = [
+    const UserModel(
+      firebaseUid: 'seed-admin',
+      fullName: 'Default Admin',
+      email: 'admin@example.com',
+      phone: '+855 000 000 001',
+      role: 'admin',
+    ),
+    const UserModel(
+      firebaseUid: 'seed-customer',
+      fullName: 'Sample Customer',
+      email: 'customer@example.com',
+      phone: '+855 000 000 002',
+      role: 'customer',
+    ),
+    const UserModel(
+      firebaseUid: 'seed-cleaner',
+      fullName: 'Sample Cleaner',
+      email: 'cleaner@example.com',
+      phone: '+855 000 000 003',
+      role: 'cleaner',
+      hourlyRate: 10,
+    ),
     const UserModel(
       firebaseUid: 'demo-admin',
       fullName: 'Admin Demo',
@@ -778,8 +855,7 @@ class DatabaseHelper {
       final activeJobs = await (await database).query(
         'bookings',
         columns: ['id'],
-        where:
-            'cleaner_id = ? AND id <> ? AND status NOT IN (?, ?, ?)',
+        where: 'cleaner_id = ? AND id <> ? AND status NOT IN (?, ?, ?)',
         whereArgs: [
           cleaner.id,
           booking.id,
@@ -895,8 +971,133 @@ class DatabaseHelper {
   Future<List<UserModel>> cleaners() async {
     final list = await users();
     return list
-        .where((item) => item.role == 'cleaner' && item.isActive)
+        .where((item) => item.role == 'cleaner' && item.status == 'active')
         .toList();
+  }
+
+  Future<int> saveCleanerApplication(
+    CleanerApplicationModel application,
+  ) async {
+    if (_apiEnabled) {
+      final remote = await _api.createCleanerApplication(application);
+      if (remote != null) return remote.id!;
+    }
+    final stamp = DateTime.now().toIso8601String();
+    if (kIsWeb) {
+      await _loadWebCleanerApplications();
+      final id = _webCleanerApplicationId++;
+      _webCleanerApplications.insert(
+        0,
+        CleanerApplicationModel.fromJson({
+          ...application.toJson(),
+          'id': id,
+          'status': 'pending',
+          'created_at': stamp,
+          'updated_at': stamp,
+        }),
+      );
+      await _saveWebCleanerApplications();
+      return id;
+    }
+    return (await database).insert(
+      'cleaner_applications',
+      application.toJson()
+        ..remove('id')
+        ..['status'] = 'pending'
+        ..['created_at'] = stamp
+        ..['updated_at'] = stamp,
+    );
+  }
+
+  Future<List<CleanerApplicationModel>> cleanerApplications() async {
+    if (_apiEnabled) {
+      final remote = await _api.cleanerApplications();
+      if (remote != null) return remote;
+    }
+    if (kIsWeb) {
+      await _loadWebCleanerApplications();
+      return List.of(_webCleanerApplications);
+    }
+    final rows = await (await database).query(
+      'cleaner_applications',
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(CleanerApplicationModel.fromJson).toList();
+  }
+
+  Future<void> approveCleanerApplication(
+    CleanerApplicationModel application,
+  ) async {
+    if (application.id == null) return;
+    if (_apiEnabled && await _api.approveCleanerApplication(application.id!)) {
+      return;
+    }
+    final stamp = DateTime.now().toIso8601String();
+    final user = UserModel(
+      firebaseUid: 'cleaner-${application.email.toLowerCase()}',
+      fullName: application.fullName,
+      email: application.email,
+      phone: application.phone,
+      role: 'cleaner',
+      address: application.address,
+      hourlyRate: 10,
+      status: 'active',
+    );
+    final userId = await upsertUser(user);
+    if (kIsWeb) {
+      final index = _webCleanerApplications.indexWhere(
+        (item) => item.id == application.id,
+      );
+      if (index >= 0) {
+        _webCleanerApplications[index] = CleanerApplicationModel.fromJson({
+          ...application.toJson(),
+          'status': 'approved',
+          'user_id': userId,
+          'updated_at': stamp,
+        });
+        await _saveWebCleanerApplications();
+      }
+      return;
+    }
+    await (await database).update(
+      'cleaner_applications',
+      {'status': 'approved', 'user_id': userId, 'updated_at': stamp},
+      where: 'id = ?',
+      whereArgs: [application.id],
+    );
+  }
+
+  Future<void> rejectCleanerApplication(
+    CleanerApplicationModel application, {
+    String note = '',
+  }) async {
+    if (application.id == null) return;
+    if (_apiEnabled &&
+        await _api.rejectCleanerApplication(application.id!, note: note)) {
+      return;
+    }
+    final stamp = DateTime.now().toIso8601String();
+    if (kIsWeb) {
+      final index = _webCleanerApplications.indexWhere(
+        (item) => item.id == application.id,
+      );
+      if (index >= 0) {
+        _webCleanerApplications[index] = CleanerApplicationModel.fromJson({
+          ...application.toJson(),
+          'status': 'rejected',
+          'admin_note': note,
+          'updated_at': stamp,
+        });
+        await _saveWebCleanerApplications();
+      }
+      return;
+    }
+    await (await database).update(
+      'cleaner_applications',
+      {'status': 'rejected', 'admin_note': note, 'updated_at': stamp},
+      where: 'id = ?',
+      whereArgs: [application.id],
+    );
   }
 
   Future<void> deleteUser(int id) async {

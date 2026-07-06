@@ -11,6 +11,7 @@ class UserModel {
     this.address = '',
     this.hourlyRate = 8,
     this.isActive = true,
+    this.status = 'active',
     this.availabilityStatus = 'Available',
     this.createdAt,
     this.updatedAt,
@@ -24,12 +25,16 @@ class UserModel {
   final String address;
   final double hourlyRate;
   final bool isActive;
+  final String status;
   final String availabilityStatus;
   final String? createdAt;
   final String? updatedAt;
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
-    final isActive = (json['is_active'] ?? 1) == 1 || json['is_active'] == true;
+    final status = json['status']?.toString();
+    final isActive = status == null
+        ? (json['is_active'] ?? 1) == 1 || json['is_active'] == true
+        : status == 'active';
     return UserModel(
       id: json['id'] as int?,
       firebaseUid:
@@ -44,6 +49,7 @@ class UserModel {
       address: json['address']?.toString() ?? '',
       hourlyRate: (json['hourly_rate'] as num?)?.toDouble() ?? 8,
       isActive: isActive,
+      status: status ?? (isActive ? 'active' : 'inactive'),
       availabilityStatus:
           json['availability_status']?.toString() ??
           (isActive ? 'Available' : 'Off Duty'),
@@ -62,6 +68,7 @@ class UserModel {
     'address': address,
     'hourly_rate': hourlyRate,
     'is_active': isActive ? 1 : 0,
+    'status': status,
     'availability_status': isActive ? availabilityStatus : 'Off Duty',
     'created_at': createdAt,
     'updated_at': updatedAt,
@@ -77,6 +84,7 @@ class UserModel {
     String? address,
     double? hourlyRate,
     bool? isActive,
+    String? status,
     String? availabilityStatus,
     String? createdAt,
     String? updatedAt,
@@ -90,6 +98,7 @@ class UserModel {
     address: address ?? this.address,
     hourlyRate: hourlyRate ?? this.hourlyRate,
     isActive: isActive ?? this.isActive,
+    status: status ?? (isActive == false ? 'inactive' : this.status),
     availabilityStatus:
         availabilityStatus ??
         (isActive == false
@@ -100,6 +109,87 @@ class UserModel {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
+}
+
+class CleanerApplicationModel {
+  const CleanerApplicationModel({
+    this.id,
+    required this.fullName,
+    required this.email,
+    required this.phone,
+    required this.gender,
+    required this.address,
+    required this.workExperience,
+    required this.skills,
+    required this.availableDays,
+    required this.availableTime,
+    this.profilePhoto = '',
+    this.idDocument = '',
+    this.status = 'pending',
+    this.adminNote = '',
+    this.userId,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  final int? id;
+  final String fullName;
+  final String email;
+  final String phone;
+  final String gender;
+  final String address;
+  final String workExperience;
+  final String skills;
+  final String availableDays;
+  final String availableTime;
+  final String profilePhoto;
+  final String idDocument;
+  final String status;
+  final String adminNote;
+  final int? userId;
+  final String? createdAt;
+  final String? updatedAt;
+
+  factory CleanerApplicationModel.fromJson(Map<String, dynamic> json) =>
+      CleanerApplicationModel(
+        id: json['id'] as int?,
+        fullName: json['full_name']?.toString() ?? '',
+        email: json['email']?.toString() ?? '',
+        phone: json['phone']?.toString() ?? '',
+        gender: json['gender']?.toString() ?? '',
+        address: json['address']?.toString() ?? '',
+        workExperience: json['work_experience']?.toString() ?? '',
+        skills: json['skills']?.toString() ?? '',
+        availableDays: json['available_days']?.toString() ?? '',
+        availableTime: json['available_time']?.toString() ?? '',
+        profilePhoto: json['profile_photo']?.toString() ?? '',
+        idDocument: json['id_document']?.toString() ?? '',
+        status: json['status']?.toString() ?? 'pending',
+        adminNote: json['admin_note']?.toString() ?? '',
+        userId: (json['user_id'] as num?)?.toInt(),
+        createdAt: json['created_at']?.toString(),
+        updatedAt: json['updated_at']?.toString(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'full_name': fullName,
+    'email': email,
+    'phone': phone,
+    'gender': gender,
+    'address': address,
+    'work_experience': workExperience,
+    'skills': skills,
+    'available_days': availableDays,
+    'available_time': availableTime,
+    'profile_photo': profilePhoto,
+    'id_document': idDocument,
+    'status': status,
+    'admin_note': adminNote,
+    'user_id': userId,
+    'created_at': createdAt,
+    'updated_at': updatedAt,
+  };
 }
 
 class ServiceModel {

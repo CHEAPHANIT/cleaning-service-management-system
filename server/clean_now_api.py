@@ -5,8 +5,11 @@ import json
 import os
 import sqlite3
 import hashlib
+import hmac
 import secrets
 import uuid
+import base64
+import re
 from urllib.request import urlopen
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
@@ -16,6 +19,10 @@ DB_PATH = os.getenv("CLEAN_NOW_DB", os.path.join(ROOT, "cleannow_server.db"))
 HOST = os.getenv("CLEAN_NOW_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLEAN_NOW_PORT", "8080"))
 OPENAPI_PATH = os.path.join(ROOT, "openapi.json")
+TOKEN_SECRET = os.getenv("CLEAN_NOW_TOKEN_SECRET", "clean-now-dev-secret")
+VALID_ROLES = {"customer", "cleaner", "admin"}
+VALID_USER_STATUSES = {"active", "pending", "suspended", "inactive", "rejected"}
+VALID_APPLICATION_STATUSES = {"pending", "approved", "rejected"}
 
 SWAGGER_UI = """<!doctype html>
 <html lang="en">
@@ -113,6 +120,16 @@ def initialize():
           title TEXT NOT NULL, address TEXT NOT NULL,
           is_default INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS cleaner_applications(
+          id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT NOT NULL,
+          email TEXT NOT NULL, phone TEXT NOT NULL, gender TEXT NOT NULL,
+          address TEXT NOT NULL, work_experience TEXT NOT NULL,
+          skills TEXT NOT NULL, available_days TEXT NOT NULL,
+          available_time TEXT NOT NULL, profile_photo TEXT NOT NULL DEFAULT '',
+          id_document TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
+          admin_note TEXT NOT NULL DEFAULT '', user_id INTEGER,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
         """)
         columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
         if "password_hash" not in columns:
@@ -120,20 +137,32 @@ def initialize():
         if "availability_status" not in columns:
             db.execute("ALTER TABLE users ADD COLUMN availability_status TEXT NOT NULL DEFAULT 'Available'")
             db.execute("UPDATE users SET availability_status='Off Duty' WHERE is_active=0")
+        if "status" not in columns:
+            db.execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+            db.execute("UPDATE users SET status=CASE WHEN is_active=1 THEN 'active' ELSE 'inactive' END")
         seeds = [
+            ("seed-admin", "Default Admin", "admin@example.com", "+855 000 000 001", "admin", 8, "Admin@123"),
+            ("seed-customer", "Sample Customer", "customer@example.com", "+855 000 000 002", "customer", 8, "Customer@123"),
+            ("seed-cleaner", "Sample Cleaner", "cleaner@example.com", "+855 000 000 003", "cleaner", 10, "Cleaner@123"),
             ("demo-admin", "Admin Demo", "admin@cleannow.demo", "+855 123 456 789", "admin", 8),
             ("demo-cleaner", "Cleaner Demo", "cleaner@cleannow.demo", "+855 987 654 321", "cleaner", 9),
             ("demo-cleaner-sokha", "Sokha Chan", "sokha@cleannow.demo", "+855 111 222 333", "cleaner", 10),
         ]
         stamp = now()
         db.executemany("""
-          INSERT INTO users(firebase_uid, full_name, email, phone, role, hourly_rate, created_at, updated_at, password_hash)
-          VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(firebase_uid) DO NOTHING
-        """, [(*seed, stamp, stamp, hash_password("demo123")) for seed in seeds])
-        for uid, *_ in seeds:
+          INSERT INTO users(firebase_uid, full_name, email, phone, role, hourly_rate, created_at, updated_at, password_hash, status, is_active)
+          VALUES(?,?,?,?,?,?,?,?,?,'active',1) ON CONFLICT(firebase_uid) DO NOTHING
+        """, [
+            (
+                seed[0], seed[1], seed[2], seed[3], seed[4], seed[5],
+                stamp, stamp, hash_password(seed[6] if len(seed) > 6 else "demo123"),
+            )
+            for seed in seeds
+        ])
+        for seed in seeds:
             db.execute(
                 "UPDATE users SET password_hash=? WHERE firebase_uid=? AND password_hash=''",
-                (hash_password("demo123"), uid),
+                (hash_password(seed[6] if len(seed) > 6 else "demo123"), seed[0]),
             )
         services = [
             (1,"Basic Home Cleaning","Home Cleaning","Trusted cleaners refresh your living areas, kitchen, bathroom, floors, and surfaces.",25,120,"https://images.unsplash.com/photo-1581578731548-c64695cc6952",4.5,1,1),
@@ -159,6 +188,42 @@ def verify_password(password, stored):
     return secrets.compare_digest(hash_password(password, salt), stored)
 
 
+def valid_email(email):
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or ""))
+
+
+def _b64(data):
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def _unb64(data):
+    return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
+
+
+def issue_token(user):
+    payload = json.dumps(
+        {"sub": user["id"], "role": user["role"], "exp": 4102444800},
+        separators=(",", ":"),
+    ).encode()
+    encoded = _b64(payload)
+    signature = hmac.new(TOKEN_SECRET.encode(), encoded.encode(), hashlib.sha256).digest()
+    return f"{encoded}.{_b64(signature)}"
+
+
+def decode_token(token):
+    try:
+        encoded, signature = token.split(".", 1)
+        expected = _b64(hmac.new(TOKEN_SECRET.encode(), encoded.encode(), hashlib.sha256).digest())
+        if not hmac.compare_digest(signature, expected):
+            return None
+        payload = json.loads(_unb64(encoded))
+        if payload.get("exp", 0) < datetime.now(timezone.utc).timestamp():
+            return None
+        return payload
+    except Exception:
+        return None
+
+
 def row_dict(row):
     return dict(row) if row else None
 
@@ -167,6 +232,7 @@ def user_dict(row):
     data = row_dict(row)
     if data:
         data.pop("password_hash", None)
+        data["status"] = data.get("status") or ("active" if data.get("is_active", 1) else "inactive")
     return data
 
 
@@ -188,7 +254,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
 
     def reply(self, status, body):
@@ -206,6 +272,29 @@ class Handler(BaseHTTPRequestHandler):
     def body(self):
         size = int(self.headers.get("Content-Length", "0"))
         return json.loads(self.rfile.read(size) or b"{}")
+
+    def current_user(self, db):
+        header = self.headers.get("Authorization", "")
+        if not header.startswith("Bearer "):
+            return None
+        payload = decode_token(header.removeprefix("Bearer ").strip())
+        if not payload:
+            return None
+        return db.execute("SELECT * FROM users WHERE id=?", (payload["sub"],)).fetchone()
+
+    def require_user(self, db, *roles):
+        user = self.current_user(db)
+        if not user:
+            self.reply(401, {"error": "Authentication required"})
+            return None
+        status = user["status"] if "status" in user.keys() else ("active" if user["is_active"] else "inactive")
+        if status != "active":
+            self.reply(403, {"error": "Account is not active"})
+            return None
+        if roles and user["role"] not in roles:
+            self.reply(403, {"error": "Forbidden"})
+            return None
+        return user
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -226,18 +315,64 @@ class Handler(BaseHTTPRequestHandler):
         with connect() as db:
             if parsed.path == "/api/health":
                 return self.reply(200, {"status": "ok", "database": DB_PATH})
+            if parsed.path == "/api/auth/me":
+                user = self.require_user(db)
+                return None if user is None else self.reply(200, {"user": user_dict(user)})
             if parsed.path == "/api/users":
+                if self.require_user(db, "admin") is None:
+                    return
                 rows = db.execute("SELECT * FROM users ORDER BY role, full_name").fetchall()
                 return self.reply(200, [user_dict(row) for row in rows])
+            if parsed.path == "/api/admin/users":
+                if self.require_user(db, "admin") is None:
+                    return
+                rows = db.execute("SELECT * FROM users ORDER BY role, full_name").fetchall()
+                return self.reply(200, [user_dict(row) for row in rows])
+            if parsed.path == "/api/admin/customers":
+                if self.require_user(db, "admin") is None:
+                    return
+                rows = db.execute("SELECT * FROM users WHERE role='customer' ORDER BY full_name").fetchall()
+                return self.reply(200, [user_dict(row) for row in rows])
+            if parsed.path == "/api/admin/cleaners":
+                if self.require_user(db, "admin") is None:
+                    return
+                rows = db.execute("SELECT * FROM users WHERE role='cleaner' ORDER BY full_name").fetchall()
+                return self.reply(200, [user_dict(row) for row in rows])
+            if parsed.path == "/api/admin/cleaner-applications":
+                if self.require_user(db, "admin") is None:
+                    return
+                rows = db.execute("SELECT * FROM cleaner_applications ORDER BY created_at DESC").fetchall()
+                return self.reply(200, [row_dict(row) for row in rows])
+            if parsed.path.startswith("/api/admin/cleaner-applications/"):
+                if self.require_user(db, "admin") is None:
+                    return
+                try:
+                    application_id = int(parsed.path.rsplit("/", 1)[1])
+                except ValueError:
+                    return self.reply(400, {"error": "Invalid application id"})
+                row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()
+                return self.reply(200, row_dict(row)) if row else self.reply(404, {"error": "Application not found"})
             if parsed.path == "/api/services":
                 rows = db.execute("SELECT * FROM services ORDER BY id").fetchall()
                 return self.reply(200, [row_dict(row) for row in rows])
             if parsed.path == "/api/bookings":
+                user = self.require_user(db)
+                if user is None:
+                    return
                 sql, args = "SELECT * FROM bookings", []
                 if "user_id" in query:
+                    if user["role"] != "admin" and int(query["user_id"][0]) != user["id"]:
+                        return self.reply(403, {"error": "Forbidden"})
                     sql, args = sql + " WHERE user_id=?", [query["user_id"][0]]
                 elif "cleaner_id" in query:
+                    if user["role"] != "admin" and (user["role"] != "cleaner" or int(query["cleaner_id"][0]) != user["id"]):
+                        return self.reply(403, {"error": "Forbidden"})
                     sql, args = sql + " WHERE cleaner_id=?", [query["cleaner_id"][0]]
+                elif user["role"] != "admin":
+                    if user["role"] == "cleaner":
+                        sql, args = sql + " WHERE cleaner_id=?", [user["id"]]
+                    else:
+                        sql, args = sql + " WHERE user_id=?", [user["id"]]
                 rows = db.execute(sql + " ORDER BY created_at DESC", args).fetchall()
                 return self.reply(200, [row_dict(row) for row in rows])
             if parsed.path == "/api/notifications" and "user_id" in query:
@@ -295,45 +430,155 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         data = self.body()
         with connect() as db:
-            if parsed.path == "/api/auth/register":
+            if parsed.path in ("/api/auth/register", "/api/auth/register-customer"):
                 email = data.get("email", "").strip().lower()
+                if not valid_email(email):
+                    return self.reply(400, {"error": "Enter a valid email"})
+                if data.get("role") in ("admin", "cleaner"):
+                    return self.reply(403, {"error": "Public registration is only available for customers"})
                 if db.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone():
                     return self.reply(409, {"error": "Email is already registered"})
                 stamp = now()
                 uid = f"api-{uuid.uuid4()}"
                 cursor = db.execute("""
-                  INSERT INTO users(firebase_uid,full_name,email,phone,role,address,hourly_rate,is_active,availability_status,created_at,updated_at,password_hash)
-                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-                """, (uid,data.get("full_name",""),email,data.get("phone",""),"customer","",8,1,"Available",stamp,stamp,hash_password(data.get("password",""))))
+                  INSERT INTO users(firebase_uid,full_name,email,phone,role,address,hourly_rate,is_active,status,availability_status,created_at,updated_at,password_hash)
+                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (uid,data.get("full_name",""),email,data.get("phone",""),"customer","",8,1,"active","Available",stamp,stamp,hash_password(data.get("password",""))))
                 row = db.execute("SELECT * FROM users WHERE id=?", (cursor.lastrowid,)).fetchone()
-                return self.reply(201, user_dict(row))
+                return self.reply(201, {"user": user_dict(row), "token": issue_token(row)})
             if parsed.path == "/api/auth/login":
-                row = db.execute("SELECT * FROM users WHERE lower(email)=? AND is_active=1", (data.get("email","").strip().lower(),)).fetchone()
+                row = db.execute("SELECT * FROM users WHERE lower(email)=?", (data.get("email","").strip().lower(),)).fetchone()
                 if not row or not verify_password(data.get("password",""), row["password_hash"]):
                     return self.reply(401, {"error": "Invalid email or password"})
-                return self.reply(200, user_dict(row))
+                status = row["status"] if "status" in row.keys() else ("active" if row["is_active"] else "inactive")
+                if status == "pending":
+                    return self.reply(403, {"error": "Your account is pending approval."})
+                if status == "suspended":
+                    return self.reply(403, {"error": "Your account has been suspended. Please contact support."})
+                if status == "rejected":
+                    return self.reply(403, {"error": "Your application has been rejected."})
+                if status != "active" or not row["is_active"] or row["role"] not in VALID_ROLES:
+                    return self.reply(403, {"error": "Account is not active"})
+                return self.reply(200, {"user": user_dict(row), "token": issue_token(row)})
+            if parsed.path == "/api/auth/logout":
+                return self.reply(200, {"ok": True})
             if parsed.path == "/api/auth/reset-password":
                 exists = db.execute("SELECT id FROM users WHERE lower(email)=?", (data.get("email","").strip().lower(),)).fetchone()
                 return self.reply(200, {"message": "Reset request accepted"}) if exists else self.reply(404, {"error": "Account not found"})
-            if parsed.path == "/api/users/upsert":
+            if parsed.path == "/api/cleaner-applications":
+                email = data.get("email", "").strip().lower()
+                if not valid_email(email):
+                    return self.reply(400, {"error": "Enter a valid email"})
+                if db.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone():
+                    return self.reply(409, {"error": "Email is already registered"})
+                if db.execute("SELECT id FROM cleaner_applications WHERE lower(email)=? AND status='pending'", (email,)).fetchone():
+                    return self.reply(409, {"error": "A pending application already exists for this email"})
                 stamp = now()
+                cursor = db.execute("""
+                  INSERT INTO cleaner_applications(full_name,email,phone,gender,address,work_experience,skills,available_days,available_time,profile_photo,id_document,status,admin_note,created_at,updated_at)
+                  VALUES(?,?,?,?,?,?,?,?,?,?,?,'pending','',?,?)
+                """, (
+                    data.get("full_name", ""), email, data.get("phone", ""),
+                    data.get("gender", ""), data.get("address", ""),
+                    data.get("work_experience", ""), data.get("skills", ""),
+                    data.get("available_days", ""), data.get("available_time", ""),
+                    data.get("profile_photo", ""), data.get("id_document", ""),
+                    stamp, stamp,
+                ))
+                notify_admins(db, "Cleaner application", f"{data.get('full_name', 'A cleaner')} applied to join CleanNow.")
+                row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (cursor.lastrowid,)).fetchone()
+                return self.reply(201, row_dict(row))
+            if parsed.path.startswith("/api/admin/cleaner-applications/") and parsed.path.endswith("/approve"):
+                admin = self.require_user(db, "admin")
+                if admin is None:
+                    return
+                try:
+                    application_id = int(parsed.path.strip("/").split("/")[-2])
+                except ValueError:
+                    return self.reply(400, {"error": "Invalid application id"})
+                application = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()
+                if not application:
+                    return self.reply(404, {"error": "Application not found"})
+                if application["status"] != "pending":
+                    return self.reply(409, {"error": "Application has already been reviewed"})
+                stamp = now()
+                existing = db.execute("SELECT * FROM users WHERE lower(email)=?", (application["email"].lower(),)).fetchone()
+                if existing:
+                    db.execute("""
+                      UPDATE users SET role='cleaner',status='active',is_active=1,full_name=?,phone=?,address=?,updated_at=?
+                      WHERE id=?
+                    """, (application["full_name"], application["phone"], application["address"], stamp, existing["id"]))
+                    user_id = existing["id"]
+                else:
+                    cursor = db.execute("""
+                      INSERT INTO users(firebase_uid,full_name,email,phone,role,address,hourly_rate,is_active,status,availability_status,created_at,updated_at,password_hash)
+                      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        f"cleaner-{uuid.uuid4()}", application["full_name"], application["email"],
+                        application["phone"], "cleaner", application["address"], 10, 1, "active",
+                        "Available", stamp, stamp, hash_password(data.get("password", "Cleaner@123")),
+                    ))
+                    user_id = cursor.lastrowid
+                db.execute("UPDATE cleaner_applications SET status='approved',user_id=?,updated_at=? WHERE id=?", (user_id, stamp, application_id))
+                row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()
+                return self.reply(200, row_dict(row))
+            if parsed.path.startswith("/api/admin/cleaner-applications/") and parsed.path.endswith("/reject"):
+                admin = self.require_user(db, "admin")
+                if admin is None:
+                    return
+                try:
+                    application_id = int(parsed.path.strip("/").split("/")[-2])
+                except ValueError:
+                    return self.reply(400, {"error": "Invalid application id"})
+                application = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()
+                if not application:
+                    return self.reply(404, {"error": "Application not found"})
+                db.execute(
+                    "UPDATE cleaner_applications SET status='rejected',admin_note=?,updated_at=? WHERE id=?",
+                    (data.get("admin_note", ""), now(), application_id),
+                )
+                return self.reply(200, row_dict(db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()))
+            if parsed.path == "/api/users/upsert":
+                current = self.require_user(db)
+                if current is None:
+                    return
+                stamp = now()
+                if current["role"] != "admin":
+                    if data.get("firebase_uid") != current["firebase_uid"]:
+                        return self.reply(403, {"error": "Forbidden"})
+                    db.execute("""
+                      UPDATE users SET full_name=?,email=?,phone=?,address=?,updated_at=?
+                      WHERE id=?
+                    """, (
+                        data.get("full_name", current["full_name"]),
+                        data.get("email", current["email"]),
+                        data.get("phone", current["phone"]),
+                        data.get("address", current["address"]),
+                        stamp,
+                        current["id"],
+                    ))
+                    row = db.execute("SELECT * FROM users WHERE id=?", (current["id"],)).fetchone()
+                    return self.reply(200, user_dict(row))
                 db.execute("""
-                  INSERT INTO users(firebase_uid,full_name,email,phone,role,address,hourly_rate,is_active,availability_status,created_at,updated_at,password_hash)
-                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                  INSERT INTO users(firebase_uid,full_name,email,phone,role,address,hourly_rate,is_active,status,availability_status,created_at,updated_at,password_hash)
+                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                   ON CONFLICT(firebase_uid) DO UPDATE SET full_name=excluded.full_name,
                     email=excluded.email,phone=excluded.phone,role=excluded.role,address=excluded.address,
-                    hourly_rate=excluded.hourly_rate,is_active=excluded.is_active,
+                    hourly_rate=excluded.hourly_rate,is_active=excluded.is_active,status=excluded.status,
                     availability_status=excluded.availability_status,updated_at=excluded.updated_at
                 """, (
                     data["firebase_uid"], data.get("full_name", ""), data.get("email", ""),
                     data.get("phone", ""), data.get("role", "customer"), data.get("address", ""),
                     data.get("hourly_rate", 8), data.get("is_active", 1),
+                    data.get("status", "active" if data.get("is_active", 1) else "inactive"),
                     data.get("availability_status", "Available"), stamp, stamp,
                     hash_password(data.get("password", "demo123")),
                 ))
                 row = db.execute("SELECT * FROM users WHERE firebase_uid=?", (data["firebase_uid"],)).fetchone()
                 return self.reply(200, user_dict(row))
             if parsed.path == "/api/services":
+                if self.require_user(db, "admin") is None:
+                    return
                 service_id = int(data.get("id", 0))
                 if service_id <= 0:
                     service_id = (db.execute("SELECT COALESCE(MAX(id),0)+1 next_id FROM services").fetchone()["next_id"])
@@ -372,6 +617,11 @@ class Handler(BaseHTTPRequestHandler):
                 row = db.execute("SELECT * FROM reviews WHERE booking_id=?", (data["booking_id"],)).fetchone()
                 return self.reply(200, row_dict(row))
             if parsed.path == "/api/bookings":
+                user = self.require_user(db, "customer")
+                if user is None:
+                    return
+                if int(data.get("user_id", 0)) != user["id"]:
+                    return self.reply(403, {"error": "Cannot book for another customer"})
                 stamp = now()
                 columns = [
                     "user_id","service_id","service_name","customer_name","phone","address",
@@ -409,6 +659,24 @@ class Handler(BaseHTTPRequestHandler):
                 )
             return self.reply(200, {"updated": True})
         parts = path.strip("/").split("/")
+        if len(parts) == 5 and parts[:3] == ["api", "admin", "users"] and parts[4] == "status":
+            data = self.body()
+            with connect() as db:
+                if self.require_user(db, "admin") is None:
+                    return
+                status = data.get("status", "")
+                if status not in VALID_USER_STATUSES:
+                    return self.reply(400, {"error": "Invalid status"})
+                try:
+                    user_id = int(parts[3])
+                except ValueError:
+                    return self.reply(400, {"error": "Invalid user id"})
+                db.execute(
+                    "UPDATE users SET status=?,is_active=?,updated_at=? WHERE id=?",
+                    (status, 1 if status == "active" else 0, now(), user_id),
+                )
+                row = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+                return self.reply(200, user_dict(row)) if row else self.reply(404, {"error": "User not found"})
         if len(parts) != 4 or parts[0] != "api" or parts[1] != "bookings":
             return self.reply(404, {"error": "Not found"})
         try:
@@ -421,6 +689,11 @@ class Handler(BaseHTTPRequestHandler):
             if not booking:
                 return self.reply(404, {"error": "Booking not found"})
             if action == "status":
+                user = self.require_user(db, "admin", "cleaner")
+                if user is None:
+                    return
+                if user["role"] == "cleaner" and booking["cleaner_id"] != user["id"]:
+                    return self.reply(403, {"error": "This job is assigned to another cleaner"})
                 status = data["status"]
                 allowed_transitions = {
                     "Pending": {"Accepted", "Cancelled", "Rejected"},
@@ -443,11 +716,18 @@ class Handler(BaseHTTPRequestHandler):
                 notify(db, booking["user_id"], "Booking status updated", f"{booking['service_name']} is now {status}.")
                 notify_admins(db, "Booking status updated", f"{booking['service_name']} #{booking_id} is now {status}.")
             elif action == "documentation":
+                user = self.require_user(db, "cleaner")
+                if user is None:
+                    return
+                if booking["cleaner_id"] != user["id"]:
+                    return self.reply(403, {"error": "This job is assigned to another cleaner"})
                 db.execute("""UPDATE bookings SET before_photos=?,after_photos=?,completion_notes=?,updated_at=? WHERE id=?""", (
                     json.dumps(data.get("before_photos", [])), json.dumps(data.get("after_photos", [])),
                     data.get("completion_notes", ""), now(), booking_id,
                 ))
             elif action == "assign":
+                if self.require_user(db, "admin") is None:
+                    return
                 if booking["status"] != "Accepted" or booking["cleaner_id"] is not None:
                     return self.reply(409, {"error": "Only an unassigned accepted booking can be assigned"})
                 cleaner = db.execute(
@@ -488,9 +768,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, {"error": "Invalid id"})
         with connect() as db:
             if parts[1] == "users":
-                db.execute("UPDATE users SET is_active=0,updated_at=? WHERE id=?", (now(),item_id))
+                if self.require_user(db, "admin") is None:
+                    return
+                db.execute("UPDATE users SET is_active=0,status='inactive',updated_at=? WHERE id=?", (now(),item_id))
                 return self.reply(200, {"deleted": True})
             if parts[1] == "services":
+                if self.require_user(db, "admin") is None:
+                    return
                 db.execute("UPDATE services SET is_active=0 WHERE id=?", (item_id,))
                 return self.reply(200, {"deleted": True})
         self.reply(404, {"error": "Not found"})

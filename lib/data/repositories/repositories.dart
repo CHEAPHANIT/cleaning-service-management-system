@@ -9,6 +9,7 @@ class AuthRepository {
   AuthRepository(this.apiEnabled);
   final bool apiEnabled;
   final CleanNowApi _api = CleanNowApi();
+  String? get authToken => CleanNowApi.authToken;
 
   Future<UserModel> register(
     String email,
@@ -40,6 +41,12 @@ class AuthRepository {
     return user;
   }
 
+  Future<UserModel?> me(String? token) async {
+    if (!apiEnabled || token == null) return null;
+    CleanNowApi.setAuthToken(token);
+    return _api.me();
+  }
+
   Future<UserModel?> profile(String uid) async {
     if (!apiEnabled) return null;
     final users = await _api.users();
@@ -59,7 +66,9 @@ class AuthRepository {
     }
   }
 
-  Future<void> logout() async {}
+  Future<void> logout() async {
+    if (apiEnabled) await _api.logout();
+  }
 }
 
 class ServiceRepository {

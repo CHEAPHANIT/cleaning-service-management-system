@@ -25,7 +25,11 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     onboarded = prefs.getBool('onboarded') ?? false;
     final savedUid = prefs.getString('current_user_uid');
-    if (savedUid != null) {
+    final savedToken = prefs.getString('auth_token');
+    if (savedToken != null) {
+      user = await repository.me(savedToken);
+    }
+    if (user == null && savedUid != null) {
       user =
           await repository.profile(savedUid) ??
           await database.getUserByUid(savedUid);
@@ -90,10 +94,17 @@ class AuthProvider extends ChangeNotifier {
     return _run(() async {
       final normalizedRole = role.toLowerCase();
       if (repository.apiEnabled) {
-        user = await repository.login(
-          '$normalizedRole@cleannow.demo',
-          'demo123',
-        );
+        final email = switch (normalizedRole) {
+          'admin' => 'admin@example.com',
+          'cleaner' => 'cleaner@example.com',
+          _ => 'customer@example.com',
+        };
+        final password = switch (normalizedRole) {
+          'admin' => 'Admin@123',
+          'cleaner' => 'Cleaner@123',
+          _ => 'Customer@123',
+        };
+        user = await repository.login(email, password);
         await _saveSession();
         return;
       }
@@ -143,17 +154,19 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     await repository.logout();
-    await (await SharedPreferences.getInstance()).remove('current_user_uid');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('current_user_uid');
+    await prefs.remove('auth_token');
     user = null;
     notifyListeners();
   }
 
   Future<void> _saveSession() async {
     if (user == null) return;
-    await (await SharedPreferences.getInstance()).setString(
-      'current_user_uid',
-      user!.firebaseUid,
-    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('current_user_uid', user!.firebaseUid);
+    final token = repository.authToken;
+    if (token != null) await prefs.setString('auth_token', token);
   }
 
   Future<bool> _run(Future<void> Function() action) async {
@@ -335,7 +348,9 @@ class BookingProvider extends ChangeNotifier {
 
   Future<void> cancel(BookingModel booking, UserModel user) async {
     if (user.role != 'customer' || booking.userId != user.id) {
-      throw ValidationException('You cannot cancel another customer\'s booking.');
+      throw ValidationException(
+        'You cannot cancel another customer\'s booking.',
+      );
     }
     await repository.cancel(booking);
     await load(booking.userId);
@@ -413,6 +428,7 @@ class AdminDataProvider extends ChangeNotifier {
   bool loading = false;
   List<UserModel> users = [];
   List<UserModel> cleaners = [];
+  List<CleanerApplicationModel> cleanerApplications = [];
   Timer? _realtimeTimer;
   bool _realtimeSyncing = false;
 
@@ -433,6 +449,7 @@ class AdminDataProvider extends ChangeNotifier {
     try {
       await database.syncWebData();
       final latestUsers = await database.users();
+      final latestApplications = await database.cleanerApplications();
       final latestCleaners = latestUsers
           .where((item) => item.role == 'cleaner' && item.isActive)
           .toList();
@@ -440,6 +457,7 @@ class AdminDataProvider extends ChangeNotifier {
           jsonEncode(users.map((item) => item.toJson()).toList())) {
         users = latestUsers;
         cleaners = latestCleaners;
+        cleanerApplications = latestApplications;
         notifyListeners();
       }
     } finally {
@@ -458,6 +476,7 @@ class AdminDataProvider extends ChangeNotifier {
     notifyListeners();
     users = await database.users();
     cleaners = await database.cleaners();
+    cleanerApplications = await database.cleanerApplications();
     loading = false;
     notifyListeners();
   }
@@ -470,6 +489,28 @@ class AdminDataProvider extends ChangeNotifier {
   Future<void> deleteUser(UserModel user) async {
     if (user.id == null) return;
     await database.deleteUser(user.id!);
+    await load();
+  }
+
+  Future<void> submitCleanerApplication(
+    CleanerApplicationModel application,
+  ) async {
+    await database.saveCleanerApplication(application);
+    await load();
+  }
+
+  Future<void> approveCleanerApplication(
+    CleanerApplicationModel application,
+  ) async {
+    await database.approveCleanerApplication(application);
+    await load();
+  }
+
+  Future<void> rejectCleanerApplication(
+    CleanerApplicationModel application, {
+    String note = '',
+  }) async {
+    await database.rejectCleanerApplication(application, note: note);
     await load();
   }
 }
