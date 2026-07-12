@@ -50,6 +50,20 @@ class CleanNowApi {
   Future<UserModel?> login(String email, String password) =>
       _userPost('/auth/login', {'email': email, 'password': password});
 
+  Future<UserModel?> socialLogin({
+    required String firebaseUid,
+    required String fullName,
+    required String email,
+    required String phone,
+    required String provider,
+  }) => _userPost('/auth/social-login', {
+    'firebase_uid': firebaseUid,
+    'full_name': fullName,
+    'email': email,
+    'phone': phone,
+    'provider': provider,
+  });
+
   Future<UserModel?> me() => _userGet('/auth/me');
 
   Future<bool> logout() async {

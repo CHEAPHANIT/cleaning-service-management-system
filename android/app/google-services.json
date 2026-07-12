@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "230569510508",
+    "project_id": "cleannow-8281c",
+    "storage_bucket": "cleannow-8281c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:230569510508:android:117ebf5be4f1a6de82fa49",
+        "android_client_info": {
+          "package_name": "com.example.clean_now"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "230569510508-jug8rvcsdi077uarck88v5qna9uv4p8r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQfvA8ZoKG_pNgGsyomeM6rqZagP3Oju4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "230569510508-jug8rvcsdi077uarck88v5qna9uv4p8r.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "230569510508-mhok7ngeln85njrqderpucb3nbe8vu43.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.cleanNow"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

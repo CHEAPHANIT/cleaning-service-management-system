@@ -41,6 +41,25 @@ class AuthRepository {
     return user;
   }
 
+  Future<UserModel> socialLogin({
+    required String firebaseUid,
+    required String fullName,
+    required String email,
+    required String phone,
+    required String provider,
+  }) async {
+    if (!apiEnabled) throw AppException('The CleanNow API is not enabled.');
+    final user = await _api.socialLogin(
+      firebaseUid: firebaseUid,
+      fullName: fullName,
+      email: email,
+      phone: phone,
+      provider: provider,
+    );
+    if (user == null) throw AppException('Social sign-in failed.');
+    return user;
+  }
+
   Future<UserModel?> me(String? token) async {
     if (!apiEnabled || token == null) return null;
     CleanNowApi.setAuthToken(token);

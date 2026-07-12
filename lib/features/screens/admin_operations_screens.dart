@@ -6,19 +6,25 @@ class AdminServiceManagementScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final services = context.watch<ServiceProvider>().services;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manage Services'),
-        actions: [
-          IconButton(
-            tooltip: 'Add service',
-            onPressed: () => showServiceEditor(context),
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
         children: [
+          _AdminPageTop(
+            user: context.watch<AuthProvider>().user,
+            title: 'Manage Services',
+            subtitle: 'Review and update cleaning service packages.',
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              onPressed: () => showServiceEditor(context),
+              icon: const Icon(Icons.add_circle_outline, size: 18),
+              label: const Text('Add service'),
+            ),
+          ),
+          const SizedBox(height: 14),
           RoleNoticeCard(
             title: 'Service package management',
             message:
@@ -123,49 +129,7 @@ class _RoleBookingManagementScreenState
         return matchesStatus && matchesSearch;
       }).toList();
       return Scaffold(
-        appBar: AppBar(
-          centerTitle: false,
-          toolbarHeight: 70,
-          titleSpacing: 32,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${AppStrings.appName} Admin',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'Management Portal',
-                style: TextStyle(
-                  color: AppColors.muted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            const _NotificationAction(),
-            IconButton(
-              tooltip: 'Logout',
-              onPressed: () async {
-                final auth = context.read<AuthProvider>();
-                final navigator = Navigator.of(context);
-                await auth.logout();
-                navigator.pushNamedAndRemoveUntil(
-                  LoginScreen.route,
-                  (_) => false,
-                );
-              },
-              icon: const Icon(Icons.logout_outlined),
-            ),
-          ],
-        ),
+        backgroundColor: Colors.white,
         body: provider.loading
             ? const LoadingWidget()
             : RefreshIndicator(
@@ -173,17 +137,11 @@ class _RoleBookingManagementScreenState
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
                   children: [
-                    const Text(
-                      'Booking Management',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Manage all bookings',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12),
+                    _AdminPageTop(
+                      user: auth.user,
+                      title: 'Booking Management',
+                      subtitle:
+                          'Manage assignments, statuses, and service flow.',
                     ),
                     const SizedBox(height: 14),
                     TextField(
@@ -690,88 +648,34 @@ class AdminFinanceScreen extends StatelessWidget {
         .length;
     final performers = _adminPerformers(adminData.cleaners, liveBookings);
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        toolbarHeight: 70,
-        titleSpacing: 32,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${AppStrings.appName} Admin',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              'Management Portal',
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () async {
-              final auth = context.read<AuthProvider>();
-              final navigator = Navigator.of(context);
-              await auth.logout();
-              navigator.pushNamedAndRemoveUntil(
-                LoginScreen.route,
-                (_) => false,
-              );
-            },
-            icon: const Icon(Icons.logout_outlined),
-          ),
-          const SizedBox(width: 10),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Reports & Analytics',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Business insights and statistics',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                height: 38,
-                child: ElevatedButton.icon(
-                  onPressed: () => showExportSheet(context, bookings),
-                  icon: const Icon(Icons.file_download_outlined, size: 16),
-                  label: const Text('Export'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(88, 38),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    backgroundColor: const Color(0xFF1087DD),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+          _AdminPageTop(
+            user: context.watch<AuthProvider>().user,
+            title: 'Reports & Analytics',
+            subtitle: 'Business insights, revenue, and cleaner performance.',
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              height: 38,
+              child: ElevatedButton.icon(
+                onPressed: () => showExportSheet(context, bookings),
+                icon: const Icon(Icons.file_download_outlined, size: 16),
+                label: const Text('Export'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(88, 38),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  backgroundColor: const Color(0xFF1087DD),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 18),
           Row(

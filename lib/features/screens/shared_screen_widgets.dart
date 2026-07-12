@@ -99,6 +99,117 @@ class _AppLogoMark extends StatelessWidget {
   }
 }
 
+class _MobilePageTopBar extends StatelessWidget {
+  const _MobilePageTopBar({
+    required this.title,
+    this.subtitle,
+    this.showBack = false,
+    this.showBrand = true,
+  });
+
+  final String title;
+  final String? subtitle;
+  final bool showBack;
+  final bool showBrand;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    final initial = (user?.fullName.trim().isNotEmpty ?? false)
+        ? user!.fullName.trim()[0].toUpperCase()
+        : 'U';
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (showBack)
+                  IconButton.filled(
+                    tooltip: 'Back',
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFF0F6FC),
+                      foregroundColor: AppColors.text,
+                    ),
+                    onPressed: () => Navigator.maybePop(context),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  )
+                else if (showBrand) ...[
+                  const _AppLogoMark(size: 32),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'CleanPro',
+                    style: TextStyle(
+                      color: AppColors.primaryDark,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                const _NotificationAction(compact: true),
+                const SizedBox(width: 8),
+                InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: () {
+                    final current = ModalRoute.of(context)?.settings.name;
+                    if (current != null && current == EditProfileScreen.route) {
+                      return;
+                    }
+                    Navigator.pushNamed(context, EditProfileScreen.route);
+                  },
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.border, width: 2),
+                    ),
+                    child: CircleAvatar(
+                      backgroundColor: const Color(0xFFEAF6FF),
+                      child: Text(
+                        initial,
+                        style: const TextStyle(
+                          color: AppColors.primaryDark,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.text,
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                height: 1.05,
+              ),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 7),
+              Text(
+                subtitle!,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 13,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class AuthScaffold extends StatelessWidget {
   const AuthScaffold({super.key, required this.children});
   final List<Widget> children;
@@ -413,11 +524,23 @@ class FeaturedServiceCard extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(right: 14),
     child: InteractiveSurface(
-      borderRadius: 8,
+      borderRadius: 16,
       child: SizedBox(
         width: 170,
-        child: Card(
+        child: Container(
           clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.07),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
           child: InkWell(
             onTap: onTap,
             child: Column(
@@ -544,9 +667,22 @@ class ServiceGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => InteractiveSurface(
-    borderRadius: 8,
-    child: Card(
+    borderRadius: 16,
+    lift: 4,
+    child: Container(
       clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
       child: InkWell(
         onTap: onTap,
         child: Column(
@@ -567,7 +703,7 @@ class ServiceGridCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         money(service.basePrice),

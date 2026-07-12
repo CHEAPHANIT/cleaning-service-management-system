@@ -39,61 +39,18 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
       (sum, item) => sum + item.totalSpent,
     );
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        toolbarHeight: 70,
-        titleSpacing: 32,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${AppStrings.appName} Admin',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              'Management Portal',
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () async {
-              final auth = context.read<AuthProvider>();
-              final navigator = Navigator.of(context);
-              await auth.logout();
-              navigator.pushNamedAndRemoveUntil(
-                LoginScreen.route,
-                (_) => false,
-              );
-            },
-            icon: const Icon(Icons.logout_outlined),
-          ),
-          const SizedBox(width: 10),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: RefreshIndicator(
         onRefresh: provider.load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
           children: [
-            const Text(
-              'Customer Management',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            _AdminPageTop(
+              user: context.watch<AuthProvider>().user,
+              title: 'Customer Management',
+              subtitle: 'Manage customer accounts and booking history.',
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Manage customer accounts',
-              style: TextStyle(color: AppColors.muted, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             TextField(
               controller: searchController,
               onChanged: (_) => setState(() {}),
@@ -171,12 +128,18 @@ class AdminCleanerApplicationsScreen extends StatelessWidget {
     final provider = context.watch<AdminDataProvider>();
     final applications = provider.cleanerApplications;
     return Scaffold(
-      appBar: AppBar(title: const Text('Cleaner Applications')),
+      backgroundColor: Colors.white,
       body: RefreshIndicator(
         onRefresh: provider.load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
           children: [
+            _AdminPageTop(
+              user: context.watch<AuthProvider>().user,
+              title: 'Cleaner Applications',
+              subtitle: 'Review cleaner requests and approval status.',
+            ),
+            const SizedBox(height: 18),
             if (applications.isEmpty)
               const EmptyStateWidget(
                 title: 'No applications',

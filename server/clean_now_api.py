@@ -460,6 +460,51 @@ class Handler(BaseHTTPRequestHandler):
                 if status != "active" or not row["is_active"] or row["role"] not in VALID_ROLES:
                     return self.reply(403, {"error": "Account is not active"})
                 return self.reply(200, {"user": user_dict(row), "token": issue_token(row)})
+            if parsed.path == "/api/auth/social-login":
+                email = data.get("email", "").strip().lower()
+                firebase_uid = data.get("firebase_uid", "").strip()
+                provider = data.get("provider", "").strip().lower()
+                if provider not in ("google", "facebook"):
+                    return self.reply(400, {"error": "Unsupported sign-in provider"})
+                if not firebase_uid:
+                    return self.reply(400, {"error": "Missing social account identifier"})
+                if not valid_email(email):
+                    return self.reply(400, {"error": "This social account did not provide a valid email"})
+                row = db.execute(
+                    "SELECT * FROM users WHERE firebase_uid=? OR lower(email)=?",
+                    (firebase_uid, email),
+                ).fetchone()
+                stamp = now()
+                if not row:
+                    cursor = db.execute("""
+                      INSERT INTO users(firebase_uid,full_name,email,phone,role,address,hourly_rate,is_active,status,availability_status,created_at,updated_at,password_hash)
+                      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        firebase_uid,
+                        data.get("full_name", "").strip() or email.split("@")[0],
+                        email,
+                        data.get("phone", "").strip() or "+855 000 000 000",
+                        "customer",
+                        "",
+                        8,
+                        1,
+                        "active",
+                        "Available",
+                        stamp,
+                        stamp,
+                        hash_password(f"{provider}-{firebase_uid}"),
+                    ))
+                    row = db.execute("SELECT * FROM users WHERE id=?", (cursor.lastrowid,)).fetchone()
+                elif row["firebase_uid"] != firebase_uid:
+                    db.execute(
+                        "UPDATE users SET firebase_uid=?,updated_at=? WHERE id=?",
+                        (firebase_uid, stamp, row["id"]),
+                    )
+                    row = db.execute("SELECT * FROM users WHERE id=?", (row["id"],)).fetchone()
+                status = row["status"] if "status" in row.keys() else ("active" if row["is_active"] else "inactive")
+                if status != "active" or not row["is_active"] or row["role"] not in VALID_ROLES:
+                    return self.reply(403, {"error": "Account is not active"})
+                return self.reply(200, {"user": user_dict(row), "token": issue_token(row)})
             if parsed.path == "/api/auth/logout":
                 return self.reply(200, {"ok": True})
             if parsed.path == "/api/auth/reset-password":

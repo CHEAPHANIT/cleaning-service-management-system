@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_core/firebase_core.dart' as firebase_core;
 import 'package:flutter/material.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/errors.dart';
@@ -90,6 +94,57 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
+  Future<bool> loginWithGoogle() async {
+    return _run(() async {
+      _ensureFirebaseReady();
+      final account = await GoogleSignIn.instance.authenticate();
+      final googleAuth = account.authentication;
+      final idToken = googleAuth.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw AppException('Google sign-in did not return an ID token.');
+      }
+      final credential = firebase_auth.GoogleAuthProvider.credential(
+        idToken: idToken,
+      );
+      final result = await firebase_auth.FirebaseAuth.instance
+          .signInWithCredential(credential);
+      final firebaseUser = result.user;
+      if (firebaseUser == null) {
+        throw AppException('Google sign-in failed.');
+      }
+      await _signInWithSocialUser(
+        firebaseUser: firebaseUser,
+        provider: 'google',
+      );
+    });
+  }
+
+  Future<bool> loginWithFacebook() async {
+    return _run(() async {
+      _ensureFirebaseReady();
+      final result = await FacebookAuth.instance.login(
+        permissions: const ['email', 'public_profile'],
+        loginTracking: LoginTracking.enabled,
+      );
+      if (result.status != LoginStatus.success || result.accessToken == null) {
+        throw AppException('Facebook sign-in was cancelled.');
+      }
+      final credential = firebase_auth.FacebookAuthProvider.credential(
+        result.accessToken!.tokenString,
+      );
+      final authResult = await firebase_auth.FirebaseAuth.instance
+          .signInWithCredential(credential);
+      final firebaseUser = authResult.user;
+      if (firebaseUser == null) {
+        throw AppException('Facebook sign-in failed.');
+      }
+      await _signInWithSocialUser(
+        firebaseUser: firebaseUser,
+        provider: 'facebook',
+      );
+    });
+  }
+
   Future<bool> loginDemoRole(String role) async {
     return _run(() async {
       final normalizedRole = role.toLowerCase();
@@ -154,11 +209,62 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     await repository.logout();
+    await firebase_auth.FirebaseAuth.instance.signOut();
+    await GoogleSignIn.instance.signOut();
+    await FacebookAuth.instance.logOut();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('current_user_uid');
     await prefs.remove('auth_token');
     user = null;
     notifyListeners();
+  }
+
+  Future<void> _signInWithSocialUser({
+    required firebase_auth.User firebaseUser,
+    required String provider,
+  }) async {
+    final email = firebaseUser.email ?? '';
+    if (email.isEmpty) {
+      throw AppException('This $provider account does not expose an email.');
+    }
+    final name = firebaseUser.displayName?.trim().isNotEmpty == true
+        ? firebaseUser.displayName!.trim()
+        : email.split('@').first;
+    final phone = firebaseUser.phoneNumber?.trim().isNotEmpty == true
+        ? firebaseUser.phoneNumber!.trim()
+        : '+855 000 000 000';
+    if (!repository.apiEnabled) {
+      final model = UserModel(
+        firebaseUid: firebaseUser.uid,
+        fullName: name,
+        email: email,
+        phone: phone,
+      );
+      user = model.copyWith(id: await database.upsertUser(model));
+      await _saveSession();
+      return;
+    }
+    user = await repository.socialLogin(
+      firebaseUid: firebaseUser.uid,
+      fullName: name,
+      email: email,
+      phone: phone,
+      provider: provider,
+    );
+    await _saveSession();
+  }
+
+  void _ensureFirebaseReady() {
+    if (firebase_core.Firebase.apps.isEmpty) {
+      throw AppException(
+        'Firebase is not configured yet. Add firebase_options.dart or platform Firebase config before using social sign-in.',
+      );
+    }
+    if (firebase_auth.FirebaseAuth.instance.app.options.apiKey.isEmpty) {
+      throw AppException(
+        'Firebase is not configured yet. Add Firebase options before using social sign-in.',
+      );
+    }
   }
 
   Future<void> _saveSession() async {

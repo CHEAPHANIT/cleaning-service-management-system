@@ -120,6 +120,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                     }
                                   },
                                 ),
+                                const SizedBox(height: 18),
+                                _SocialAuthSection(
+                                  actionText: 'sign in',
+                                  loading: auth.loading,
+                                  onGoogle: () => _continueWithSocial(
+                                    context,
+                                    auth.loginWithGoogle,
+                                  ),
+                                  onFacebook: () => _continueWithSocial(
+                                    context,
+                                    auth.loginWithFacebook,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -150,6 +163,20 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     ),
+  );
+}
+
+Future<void> _continueWithSocial(
+  BuildContext context,
+  Future<bool> Function() action,
+) async {
+  final ok = await action();
+  if (!ok || !context.mounted) return;
+  final auth = context.read<AuthProvider>();
+  Navigator.pushNamedAndRemoveUntil(
+    context,
+    dashboardRouteForRole(auth.user!.role),
+    (_) => false,
   );
 }
 
@@ -392,6 +419,102 @@ class _LoginFooterAction extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: AppColors.border),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SocialAuthSection extends StatelessWidget {
+  const _SocialAuthSection({
+    required this.actionText,
+    required this.onGoogle,
+    required this.onFacebook,
+    this.loading = false,
+  });
+
+  final String actionText;
+  final VoidCallback onGoogle;
+  final VoidCallback onFacebook;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Row(
+        children: [
+          const Expanded(child: Divider(color: AppColors.border)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'Or $actionText with',
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ),
+          const Expanded(child: Divider(color: AppColors.border)),
+        ],
+      ),
+      const SizedBox(height: 14),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _SocialLogoButton(
+            tooltip: 'Continue with Google',
+            label: 'G',
+            color: const Color(0xFF4285F4),
+            onPressed: loading ? null : onGoogle,
+          ),
+          const SizedBox(width: 12),
+          _SocialLogoButton(
+            tooltip: 'Continue with Facebook',
+            label: 'f',
+            color: const Color(0xFF1877F2),
+            onPressed: loading ? null : onFacebook,
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+class _SocialLogoButton extends StatelessWidget {
+  const _SocialLogoButton({
+    required this.tooltip,
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final String label;
+  final Color color;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: SizedBox(
+      width: 58,
+      height: 46,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: AppColors.border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: EdgeInsets.zero,
+          elevation: 0,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: label == 'f' ? 25 : 22,
+            fontWeight: FontWeight.w900,
+            height: 1,
+          ),
         ),
       ),
     ),

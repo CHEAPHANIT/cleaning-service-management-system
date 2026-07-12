@@ -8,15 +8,34 @@ class FavoriteScreen extends StatelessWidget {
     final services = context.watch<ServiceProvider>().services;
     final userId = context.watch<AuthProvider>().user?.id;
     return Scaffold(
-      appBar: AppBar(title: const Text('Favorites')),
+      backgroundColor: Colors.white,
       body: favorites.isEmpty
-          ? const EmptyStateWidget(
-              title: 'No favorites',
-              message: 'Tap the heart on any service to save it.',
-              icon: Icons.favorite_border,
+          ? const Column(
+              children: [
+                _MobilePageTopBar(
+                  title: 'Favorites',
+                  subtitle: 'Your saved services in one place.',
+                  showBack: true,
+                  showBrand: false,
+                ),
+                Expanded(
+                  child: EmptyStateWidget(
+                    title: 'No favorites',
+                    message: 'Tap the heart on any service to save it.',
+                    icon: Icons.favorite_border,
+                  ),
+                ),
+              ],
             )
           : ListView(
+              padding: EdgeInsets.zero,
               children: [
+                const _MobilePageTopBar(
+                  title: 'Favorites',
+                  subtitle: 'Your saved services in one place.',
+                  showBack: true,
+                  showBrand: false,
+                ),
                 for (final item in favorites)
                   ListTile(
                     leading: ClipRRect(
@@ -74,11 +93,17 @@ class _ProductListScreenState extends State<ProductListScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<ProductProvider>();
     return Scaffold(
-      appBar: AppBar(title: const Text('Cleaning Add-ons')),
+      backgroundColor: Colors.white,
       body: Column(
         children: [
+          const _MobilePageTopBar(
+            title: 'Cleaning Add-ons',
+            subtitle: 'Supplies and extras for a better service.',
+            showBack: true,
+            showBrand: false,
+          ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
             child: TextField(
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
@@ -93,7 +118,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 : provider.error != null
                 ? ErrorView(message: provider.error!, onRetry: provider.load)
                 : GridView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
@@ -161,38 +186,53 @@ class ProductDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final product = ModalRoute.of(context)!.settings.arguments as ProductModel;
     return Scaffold(
-      appBar: AppBar(title: Text(product.title)),
+      backgroundColor: Colors.white,
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.zero,
         children: [
-          Image.network(product.imageUrl, height: 260, fit: BoxFit.contain),
-          Text(
-            product.title,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+          _MobilePageTopBar(
+            title: product.title,
+            subtitle: product.category,
+            showBack: true,
+            showBrand: false,
           ),
-          Text(
-            product.category,
-            style: const TextStyle(color: AppColors.muted),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            money(product.price),
-            style: const TextStyle(
-              color: AppColors.primary,
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Recommended as a cleaning supply or add-on item. ${product.description}',
-          ),
-          const SizedBox(height: 18),
-          CustomButton(
-            label: 'Save add-on',
-            icon: Icons.bookmark_add_outlined,
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Saved locally for demo.')),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 260,
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F7FB),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Image.network(product.imageUrl, fit: BoxFit.contain),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  money(product.price),
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Recommended as a cleaning supply or add-on item. ${product.description}',
+                ),
+                const SizedBox(height: 18),
+                CustomButton(
+                  label: 'Save add-on',
+                  icon: Icons.bookmark_add_outlined,
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Saved locally for demo.')),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -224,15 +264,34 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Widget build(BuildContext context) {
     final items = context.watch<NotificationProvider>().notifications;
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
+      backgroundColor: Colors.white,
       body: items.isEmpty
-          ? const EmptyStateWidget(
-              title: 'No notifications',
-              message: 'Booking updates will appear here.',
-              icon: Icons.notifications_none,
+          ? const Column(
+              children: [
+                _MobilePageTopBar(
+                  title: 'Notifications',
+                  subtitle: 'Booking updates and service alerts.',
+                  showBack: true,
+                  showBrand: false,
+                ),
+                Expanded(
+                  child: EmptyStateWidget(
+                    title: 'No notifications',
+                    message: 'Booking updates will appear here.',
+                    icon: Icons.notifications_none,
+                  ),
+                ),
+              ],
             )
           : ListView(
+              padding: EdgeInsets.zero,
               children: [
+                const _MobilePageTopBar(
+                  title: 'Notifications',
+                  subtitle: 'Booking updates and service alerts.',
+                  showBack: true,
+                  showBrand: false,
+                ),
                 for (final item in items)
                   ListTile(
                     leading: Icon(

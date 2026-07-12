@@ -11,22 +11,26 @@ class ServiceListScreen extends StatelessWidget {
     final userId = context.watch<AuthProvider>().user?.id;
     final list = provider.filtered;
     return Scaffold(
-      appBar: inShell
-          ? null
-          : AppBar(
-              leading: BackButton(
-                style: IconButton.styleFrom(foregroundColor: AppColors.text),
-              ),
-              title: const Text('Services'),
-            ),
+      backgroundColor: Colors.white,
       body: RefreshIndicator(
         onRefresh: provider.loadServices,
         child: Column(
           children: [
             if (inShell)
-              const SafeArea(child: SectionHeader(title: 'Services')),
+              const _MobilePageTopBar(
+                title: 'Search',
+                subtitle: 'Browse available cleaning services.',
+                showBrand: false,
+              )
+            else
+              const _MobilePageTopBar(
+                title: 'Search',
+                subtitle: 'Find the right service for your home.',
+                showBack: true,
+                showBrand: false,
+              ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
               child: Row(
                 children: [
                   Expanded(
@@ -55,7 +59,7 @@ class ServiceListScreen extends StatelessWidget {
               height: 44,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: provider.categories.map((category) {
                   final selected = provider.category == category;
                   return Padding(
@@ -82,7 +86,7 @@ class ServiceListScreen extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
               child: DropdownButtonFormField(
                 initialValue: provider.sort,
                 decoration: const InputDecoration(
@@ -112,7 +116,7 @@ class ServiceListScreen extends StatelessWidget {
                       message: 'Try another search or category.',
                     )
                   : GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
@@ -164,66 +168,59 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
     final userId = context.watch<AuthProvider>().user?.id;
     final galleryImages = _serviceGalleryImages(service);
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: Text(service.name),
-        actions: [
-          IconButton(
-            tooltip: 'Save service',
-            onPressed: () => requireLogin(
+      backgroundColor: Colors.white,
+      body: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          _ServiceDetailHero(
+            service: service,
+            favorite: favoriteProvider.isFavorite(service.id),
+            onFavorite: () => requireLogin(
               context,
               () => favoriteProvider.toggle(userId!, service),
             ),
-            icon: Icon(
-              favoriteProvider.isFavorite(service.id)
-                  ? Icons.favorite
-                  : Icons.favorite_border,
-              color: favoriteProvider.isFavorite(service.id)
-                  ? AppColors.danger
-                  : AppColors.text,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 104),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    _ServiceMetricPill(
+                      icon: Icons.schedule_outlined,
+                      label: '${service.durationMinutes} min',
+                    ),
+                    const SizedBox(width: 8),
+                    _ServiceMetricPill(
+                      icon: Icons.star_rounded,
+                      iconColor: AppColors.accent,
+                      label: '${service.rating} rating',
+                    ),
+                    const SizedBox(width: 8),
+                    const _ServiceMetricPill(
+                      icon: Icons.verified_outlined,
+                      label: 'Verified',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _ServiceDetailTabs(
+                  selectedIndex: selectedTab,
+                  onSelected: (index) => setState(() => selectedTab = index),
+                ),
+                const SizedBox(height: 16),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeOut,
+                  child: switch (selectedTab) {
+                    0 => _ServiceAboutView(service: service),
+                    1 => _ServiceGalleryView(images: galleryImages),
+                    _ => _ServiceReviewView(rating: service.rating),
+                  },
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 104),
-        children: [
-          _ServiceDetailHero(service: service),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _ServiceMetricPill(
-                icon: Icons.schedule_outlined,
-                label: '${service.durationMinutes} min',
-              ),
-              const SizedBox(width: 8),
-              _ServiceMetricPill(
-                icon: Icons.star_rounded,
-                iconColor: AppColors.accent,
-                label: '${service.rating} rating',
-              ),
-              const SizedBox(width: 8),
-              const _ServiceMetricPill(
-                icon: Icons.verified_outlined,
-                label: 'Verified',
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          _ServiceDetailTabs(
-            selectedIndex: selectedTab,
-            onSelected: (index) => setState(() => selectedTab = index),
-          ),
-          const SizedBox(height: 16),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeOut,
-            child: switch (selectedTab) {
-              0 => _ServiceAboutView(service: service),
-              1 => _ServiceGalleryView(images: galleryImages),
-              _ => _ServiceReviewView(rating: service.rating),
-            },
           ),
         ],
       ),
@@ -280,28 +277,33 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
 }
 
 class _ServiceDetailHero extends StatelessWidget {
-  const _ServiceDetailHero({required this.service});
+  const _ServiceDetailHero({
+    required this.service,
+    required this.favorite,
+    required this.onFavorite,
+  });
 
   final ServiceModel service;
+  final bool favorite;
+  final VoidCallback onFavorite;
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(14),
+  Widget build(BuildContext context) => SizedBox(
+    height: 360,
     child: Stack(
       children: [
-        Image.network(
-          service.imageUrl,
-          height: 250,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            height: 250,
-            color: const Color(0xFFEAF6FF),
-            child: const Center(
-              child: Icon(
-                Icons.cleaning_services_outlined,
-                color: AppColors.primary,
-                size: 54,
+        Positioned.fill(
+          child: Image.network(
+            service.imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: const Color(0xFFEAF6FF),
+              child: const Center(
+                child: Icon(
+                  Icons.cleaning_services_outlined,
+                  color: AppColors.primary,
+                  size: 54,
+                ),
               ),
             ),
           ),
@@ -317,6 +319,34 @@ class _ServiceDetailHero extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
+            ),
+          ),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                IconButton.filled(
+                  tooltip: 'Back',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.26),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.maybePop(context),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const Spacer(),
+                IconButton.filled(
+                  tooltip: 'Save service',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.26),
+                    foregroundColor: favorite ? AppColors.danger : Colors.white,
+                  ),
+                  onPressed: onFavorite,
+                  icon: Icon(favorite ? Icons.favorite : Icons.favorite_border),
+                ),
+              ],
             ),
           ),
         ),

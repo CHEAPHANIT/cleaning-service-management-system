@@ -154,6 +154,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     }
                                   },
                                 ),
+                                const SizedBox(height: 18),
+                                _SocialAuthSection(
+                                  actionText: 'sign up',
+                                  loading: auth.loading,
+                                  onGoogle: () => _continueWithSocial(
+                                    context,
+                                    auth.loginWithGoogle,
+                                  ),
+                                  onFacebook: () => _continueWithSocial(
+                                    context,
+                                    auth.loginWithFacebook,
+                                  ),
+                                ),
                               ],
                             ),
                           ),

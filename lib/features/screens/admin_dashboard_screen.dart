@@ -51,48 +51,9 @@ class AdminDashboardScreen extends StatelessWidget {
     final dashboardCleaners = activeCleaners == 0 ? 32 : activeCleaners;
     final dashboardCustomers = customers == 0 ? 1247 : customers;
     final dashboardRevenue = completedRevenue == 0 ? 28450.0 : completedRevenue;
+    final user = context.watch<AuthProvider>().user;
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        toolbarHeight: 70,
-        titleSpacing: 32,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${AppStrings.appName} Admin',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              'Management Portal',
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          const _NotificationAction(),
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () async {
-              final auth = context.read<AuthProvider>();
-              final navigator = Navigator.of(context);
-              await auth.logout();
-              navigator.pushNamedAndRemoveUntil(
-                LoginScreen.route,
-                (_) => false,
-              );
-            },
-            icon: const Icon(Icons.logout_outlined),
-          ),
-          const SizedBox(width: 10),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: RefreshIndicator(
         onRefresh: () async {
           final bookingProvider = context.read<BookingProvider>();
@@ -104,57 +65,13 @@ class AdminDashboardScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFDDE6EE)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAF6FF),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.dashboard_rounded,
-                      color: AppColors.primaryDark,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${AppStrings.appName} Admin Dashboard',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          DateFormat(
-                            'EEEE, MMMM d, yyyy',
-                          ).format(DateTime.now()),
-                          style: const TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            _AdminPageTop(
+              user: user,
+              title: 'Dashboard',
+              subtitle:
+                  'Welcome back, ${user?.role == 'admin' ? 'Admin' : 'User'}. System is running at optimal capacity.',
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
@@ -333,6 +250,133 @@ List<_AdminPerformer> _adminPerformers(
 String _adminMoney(num value) {
   final rounded = value.round();
   return '\$${NumberFormat.decimalPattern().format(rounded)}';
+}
+
+class _AdminPageTop extends StatelessWidget {
+  const _AdminPageTop({
+    required this.user,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final UserModel? user;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const _AppLogoMark(
+              size: 30,
+              primary: AppColors.primaryDark,
+              secondary: AppColors.primary,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'CleanPro',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.primaryDark,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const _NotificationAction(compact: true),
+            const SizedBox(width: 8),
+            _AdminProfileMenu(user: user),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Divider(height: 1, color: Color(0xFFDDE6EE)),
+        const SizedBox(height: 22),
+        Text(
+          title,
+          style: TextStyle(
+            color: AppColors.text,
+            fontSize: 29,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            color: AppColors.muted,
+            fontSize: 13,
+            height: 1.35,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdminProfileMenu extends StatelessWidget {
+  const _AdminProfileMenu({required this.user});
+
+  final UserModel? user;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = (user?.fullName.isNotEmpty ?? false)
+        ? user!.fullName[0].toUpperCase()
+        : 'A';
+    return PopupMenuButton<String>(
+      tooltip: 'Admin profile',
+      offset: const Offset(0, 42),
+      onSelected: (value) async {
+        if (value != 'logout') return;
+        final auth = context.read<AuthProvider>();
+        final navigator = Navigator.of(context);
+        await auth.logout();
+        navigator.pushNamedAndRemoveUntil(LoginScreen.route, (_) => false);
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(Icons.logout_outlined, size: 18),
+              SizedBox(width: 10),
+              Text('Logout'),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFFDDE6EE), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: CircleAvatar(
+          backgroundColor: AppColors.primaryDark,
+          child: Text(
+            initial,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AdminDashboardTitle extends StatelessWidget {

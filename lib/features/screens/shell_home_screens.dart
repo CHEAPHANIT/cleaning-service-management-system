@@ -142,115 +142,92 @@ class HomeScreen extends StatelessWidget {
     final services = _customerHomeServices(serviceProvider.services);
     final nextBooking = _nextCustomerBooking(bookings);
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        toolbarHeight: 68,
-        titleSpacing: 22,
-        title: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1087DD),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.auto_awesome,
-                color: Colors.white,
-                size: 19,
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'CleanPro',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Customer Portal',
-                  style: TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          const _NotificationAction(),
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              await context.read<AuthProvider>().logout();
-              navigator.pushNamedAndRemoveUntil(
-                LoginScreen.route,
-                (_) => false,
-              );
-            },
-            icon: const Icon(Icons.logout_outlined),
-          ),
-          const SizedBox(width: 10),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: RefreshIndicator(
         onRefresh: serviceProvider.loadServices,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+          padding: EdgeInsets.zero,
           children: [
-            const SizedBox(height: 8),
-            _CustomerHomeHero(
-              userName: auth.user?.fullName.split(' ').first ?? 'there',
-              nextBooking: nextBooking,
+            _MobilePageTopBar(
+              title: 'Hi, ${auth.user?.fullName.split(' ').first ?? 'there'}',
+              subtitle: 'Find trusted home services near you.',
             ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Our Services',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+              child: Column(
+                children: [
+                  TextField(
+                    readOnly: true,
+                    onTap: () =>
+                        Navigator.pushNamed(context, ServiceListScreen.route),
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search_rounded),
+                      hintText: 'How can we help you today?',
+                      suffixIcon: Icon(Icons.tune_outlined),
+                    ),
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: () =>
-                      Navigator.pushNamed(context, ServiceListScreen.route),
-                  label: const Text('View All'),
-                  iconAlignment: IconAlignment.end,
-                  icon: const Icon(Icons.arrow_forward, size: 15),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: services.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 0.86,
+                  const SizedBox(height: 18),
+                ],
               ),
-              itemBuilder: (context, index) {
-                final option = services[index];
-                return _CustomerHomeServiceCard(
-                  option: option,
-                  onTap: () => _openCustomerHomeService(context, option),
-                );
-              },
             ),
-            const SizedBox(height: 20),
-            _FirstTimeDiscountCard(
-              onBook: () =>
-                  Navigator.pushNamed(context, ServiceListScreen.route),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: Column(
+                children: [
+                  _CustomerHomeHero(
+                    userName: auth.user?.fullName.split(' ').first ?? 'there',
+                    nextBooking: nextBooking,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Our Services',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          ServiceListScreen.route,
+                        ),
+                        label: const Text('View All'),
+                        iconAlignment: IconAlignment.end,
+                        icon: const Icon(Icons.arrow_forward, size: 15),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: services.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 0.86,
+                        ),
+                    itemBuilder: (context, index) {
+                      final option = services[index];
+                      return _CustomerHomeServiceCard(
+                        option: option,
+                        onTap: () => _openCustomerHomeService(context, option),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  _FirstTimeDiscountCard(
+                    onBook: () =>
+                        Navigator.pushNamed(context, ServiceListScreen.route),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

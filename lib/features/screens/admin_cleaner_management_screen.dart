@@ -49,95 +49,39 @@ class _AdminCleanerManagementScreenState
       return _cleanerAvailabilityStatus(cleaner, jobs) == 'Busy';
     }).length;
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        toolbarHeight: 70,
-        titleSpacing: 32,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${AppStrings.appName} Admin',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              'Management Portal',
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () async {
-              final auth = context.read<AuthProvider>();
-              final navigator = Navigator.of(context);
-              await auth.logout();
-              navigator.pushNamedAndRemoveUntil(
-                LoginScreen.route,
-                (_) => false,
-              );
-            },
-            icon: const Icon(Icons.logout_outlined),
-          ),
-          const SizedBox(width: 10),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: RefreshIndicator(
         onRefresh: provider.load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Cleaner\nManagement',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          height: 1.35,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Manage cleaning staff',
-                        style: TextStyle(color: AppColors.muted, fontSize: 12),
-                      ),
-                    ],
+            _AdminPageTop(
+              user: context.watch<AuthProvider>().user,
+              title: 'Cleaner Management',
+              subtitle: 'Manage cleaning staff, availability, and assignments.',
+            ),
+            const SizedBox(height: 18),
+            Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                width: 132,
+                height: 46,
+                child: ElevatedButton.icon(
+                  onPressed: () => showAddCleanerSheet(context),
+                  icon: const Icon(Icons.person_add_alt_1, size: 16),
+                  label: const Text(
+                    'Add Cleaner',
+                    style: TextStyle(fontSize: 12),
                   ),
-                ),
-                SizedBox(
-                  width: 118,
-                  height: 58,
-                  child: ElevatedButton.icon(
-                    onPressed: () => showAddCleanerSheet(context),
-                    icon: const Icon(Icons.person_add_alt_1, size: 16),
-                    label: const Text(
-                      'Add\nCleaner',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, height: 1.15),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(118, 58),
-                      backgroundColor: const Color(0xFF168BDB),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(132, 46),
+                    backgroundColor: const Color(0xFF168BDB),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 14),
             TextField(
@@ -964,56 +908,25 @@ Future<void> showCleanerDetailSheet(
                         text: 'Sarah is always punctual and professional.',
                       ),
                       const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 44,
-                              child: OutlinedButton.icon(
-                                onPressed: () => Navigator.pop(
-                                  sheetContext,
-                                  _CleanerDetailAction.deactivate,
-                                ),
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  size: 16,
-                                ),
-                                label: const Text('Deactivate'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.danger,
-                                  side: const BorderSide(
-                                    color: Color(0xFFFFB8B8),
-                                  ),
-                                  minimumSize: const Size.fromHeight(44),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.pop(
+                            sheetContext,
+                            _CleanerDetailAction.deactivate,
+                          ),
+                          icon: const Icon(Icons.delete_outline, size: 16),
+                          label: const Text('Deactivate'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            side: const BorderSide(color: Color(0xFFFFB8B8)),
+                            minimumSize: const Size.fromHeight(44),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: SizedBox(
-                              height: 44,
-                              child: ElevatedButton.icon(
-                                onPressed: () => Navigator.pop(
-                                  sheetContext,
-                                  _CleanerDetailAction.editProfile,
-                                ),
-                                icon: const Icon(Icons.edit_outlined, size: 16),
-                                label: const Text('Edit Profile'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF168BDB),
-                                  minimumSize: const Size.fromHeight(44),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
@@ -1028,10 +941,6 @@ Future<void> showCleanerDetailSheet(
 
   if (!parentContext.mounted) return;
   switch (action) {
-    case _CleanerDetailAction.editProfile:
-      await _waitForModalRouteToSettle();
-      if (!parentContext.mounted) return;
-      await showEditCleanerSheet(parentContext, cleaner: cleaner);
     case _CleanerDetailAction.deactivate:
       await _waitForModalRouteToSettle();
       if (!parentContext.mounted) return;
@@ -1043,7 +952,7 @@ Future<void> showCleanerDetailSheet(
   }
 }
 
-enum _CleanerDetailAction { editProfile, deactivate }
+enum _CleanerDetailAction { deactivate }
 
 Future<void> _waitForModalRouteToSettle() async {
   await WidgetsBinding.instance.endOfFrame;
