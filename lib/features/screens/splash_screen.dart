@@ -35,11 +35,7 @@ class _SplashScreenState extends State<SplashScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const _AppLogoMark(
-            size: 94,
-            secondary: AppColors.accent,
-            showShadow: true,
-          ),
+          const _AppLogoMark(size: 94, showShadow: true),
           const SizedBox(height: 18),
           const Text(
             AppStrings.appName,

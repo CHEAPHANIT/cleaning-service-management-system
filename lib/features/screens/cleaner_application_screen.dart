@@ -14,6 +14,8 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
   final name = TextEditingController();
   final email = TextEditingController();
   final phone = TextEditingController();
+  final password = TextEditingController();
+  final confirmPassword = TextEditingController();
   final address = TextEditingController();
   final experience = TextEditingController();
   final imagePicker = ImagePicker();
@@ -51,7 +53,15 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
 
   @override
   void dispose() {
-    for (final controller in [name, email, phone, address, experience]) {
+    for (final controller in [
+      name,
+      email,
+      phone,
+      password,
+      confirmPassword,
+      address,
+      experience,
+    ]) {
       controller.dispose();
     }
     super.dispose();
@@ -203,6 +213,28 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
                                   icon: Icons.mail_outline_rounded,
                                   validator: Validators.email,
                                   keyboardType: TextInputType.emailAddress,
+                                ),
+                                const SizedBox(height: 12),
+                                _LoginTextField(
+                                  controller: password,
+                                  label: 'Password',
+                                  icon: Icons.lock_outline_rounded,
+                                  validator: Validators.password,
+                                  obscureText: true,
+                                  canToggleObscure: true,
+                                ),
+                                const SizedBox(height: 12),
+                                _LoginTextField(
+                                  controller: confirmPassword,
+                                  label: 'Confirm password',
+                                  icon: Icons.verified_user_outlined,
+                                  validator: (value) =>
+                                      Validators.confirmPassword(
+                                        value,
+                                        password.text,
+                                      ),
+                                  obscureText: true,
+                                  canToggleObscure: true,
                                 ),
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<String>(
@@ -358,27 +390,44 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
                                         );
                                         return;
                                       }
-                                      await provider.submitCleanerApplication(
-                                        CleanerApplicationModel(
-                                          fullName: name.text.trim(),
-                                          email: email.text.trim(),
-                                          phone: phone.text.trim(),
-                                          gender: selectedGender!,
-                                          address: address.text.trim(),
-                                          workExperience:
-                                              '$experienceLength — ${experience.text.trim()}',
-                                          skills: selectedSkills.join(', '),
-                                          availableDays: weekDays
-                                              .where(selectedDays.contains)
-                                              .join(', '),
-                                          availableTime:
-                                              '${availableFrom!.format(context)} – ${availableUntil!.format(context)}',
-                                          profilePhoto: profilePhoto!,
-                                          idDocument: idDocument!,
-                                        ),
-                                      );
-                                      if (mounted) {
-                                        setState(() => submitted = true);
+                                      try {
+                                        await provider.submitCleanerApplication(
+                                          CleanerApplicationModel(
+                                            fullName: name.text.trim(),
+                                            email: email.text.trim(),
+                                            phone: phone.text.trim(),
+                                            gender: selectedGender!,
+                                            address: address.text.trim(),
+                                            workExperience:
+                                                '$experienceLength — ${experience.text.trim()}',
+                                            skills: selectedSkills.join(', '),
+                                            availableDays: weekDays
+                                                .where(selectedDays.contains)
+                                                .join(', '),
+                                            availableTime:
+                                                '${availableFrom!.format(context)} – ${availableUntil!.format(context)}',
+                                            password: password.text,
+                                            profilePhoto: profilePhoto!,
+                                            idDocument: idDocument!,
+                                          ),
+                                        );
+                                        if (context.mounted) {
+                                          setState(() => submitted = true);
+                                        }
+                                      } catch (error) {
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              error.toString().replaceFirst(
+                                                'AppException: ',
+                                                '',
+                                              ),
+                                            ),
+                                          ),
+                                        );
                                       }
                                     },
                                   ),

@@ -129,6 +129,7 @@ def initialize():
           available_time TEXT NOT NULL, profile_photo TEXT NOT NULL DEFAULT '',
           id_document TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
           admin_note TEXT NOT NULL DEFAULT '', user_id INTEGER,
+          password_hash TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS demo_payments(
@@ -146,13 +147,34 @@ def initialize():
         if "status" not in columns:
             db.execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
             db.execute("UPDATE users SET status=CASE WHEN is_active=1 THEN 'active' ELSE 'inactive' END")
+        application_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(cleaner_applications)")
+        }
+        if "password_hash" not in application_columns:
+            db.execute(
+                "ALTER TABLE cleaner_applications "
+                "ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''"
+            )
+        legacy_cleaner_ids = db.execute(
+            """
+            SELECT DISTINCT user_id FROM cleaner_applications
+            WHERE status='approved' AND user_id IS NOT NULL AND password_hash=''
+            """
+        ).fetchall()
+        for legacy in legacy_cleaner_ids:
+            db.execute(
+                "UPDATE users SET password_hash=? WHERE id=? AND role='cleaner'",
+                (hash_password(secrets.token_urlsafe(32)), legacy["user_id"]),
+            )
+        db.execute(
+            """
+            UPDATE cleaner_applications SET password_hash='legacy-disabled'
+            WHERE status='approved' AND user_id IS NOT NULL AND password_hash=''
+            """
+        )
         seeds = [
             ("seed-admin", "Default Admin", "admin@example.com", "+855 000 000 001", "admin", 8, "Admin@123"),
-            ("seed-customer", "Sample Customer", "customer@example.com", "+855 000 000 002", "customer", 8, "Customer@123"),
-            ("seed-cleaner", "Sample Cleaner", "cleaner@example.com", "+855 000 000 003", "cleaner", 10, "Cleaner@123"),
-            ("demo-admin", "Admin Demo", "admin@cleannow.demo", "+855 123 456 789", "admin", 8),
-            ("demo-cleaner", "Cleaner Demo", "cleaner@cleannow.demo", "+855 987 654 321", "cleaner", 9),
-            ("demo-cleaner-sokha", "Sokha Chan", "sokha@cleannow.demo", "+855 111 222 333", "cleaner", 10),
+            ("demo-admin", "Admin Demo", "admin@cleannow.demo", "+855 123 456 789", "admin", 8, "demo123"),
         ]
         stamp = now()
         db.executemany("""
@@ -161,14 +183,21 @@ def initialize():
         """, [
             (
                 seed[0], seed[1], seed[2], seed[3], seed[4], seed[5],
-                stamp, stamp, hash_password(seed[6] if len(seed) > 6 else "demo123"),
+                stamp, stamp, hash_password(seed[6]),
             )
             for seed in seeds
         ])
         for seed in seeds:
             db.execute(
                 "UPDATE users SET password_hash=? WHERE firebase_uid=? AND password_hash=''",
-                (hash_password(seed[6] if len(seed) > 6 else "demo123"), seed[0]),
+                (hash_password(seed[6]), seed[0]),
+            )
+        # Retire the old shared customer/cleaner demo credentials while keeping
+        # any historical records linked to those user IDs intact.
+        for uid in ("seed-customer", "seed-cleaner", "demo-cleaner", "demo-cleaner-sokha"):
+            db.execute(
+                "UPDATE users SET password_hash=? WHERE firebase_uid=? AND role!='admin'",
+                (hash_password(secrets.token_urlsafe(32)), uid),
             )
         services = [
             (1,"Basic Home Cleaning","Home Cleaning","Trusted cleaners refresh your living areas, kitchen, bathroom, floors, and surfaces.",25,120,"https://images.unsplash.com/photo-1581578731548-c64695cc6952",4.5,1,1),
@@ -246,6 +275,13 @@ def user_dict(row):
     if data:
         data.pop("password_hash", None)
         data["status"] = data.get("status") or ("active" if data.get("is_active", 1) else "inactive")
+    return data
+
+
+def cleaner_application_dict(row):
+    data = row_dict(row)
+    if data:
+        data.pop("password_hash", None)
     return data
 
 
@@ -395,7 +431,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.require_user(db, "admin") is None:
                     return
                 rows = db.execute("SELECT * FROM cleaner_applications ORDER BY created_at DESC").fetchall()
-                return self.reply(200, [row_dict(row) for row in rows])
+                return self.reply(200, [cleaner_application_dict(row) for row in rows])
             if parsed.path.startswith("/api/admin/cleaner-applications/"):
                 if self.require_user(db, "admin") is None:
                     return
@@ -404,7 +440,7 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     return self.reply(400, {"error": "Invalid application id"})
                 row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()
-                return self.reply(200, row_dict(row)) if row else self.reply(404, {"error": "Application not found"})
+                return self.reply(200, cleaner_application_dict(row)) if row else self.reply(404, {"error": "Application not found"})
             if parsed.path == "/api/services":
                 rows = db.execute("SELECT * FROM services ORDER BY id").fetchall()
                 return self.reply(200, [row_dict(row) for row in rows])
@@ -453,6 +489,23 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(400, {"error": "Invalid booking id"})
                 row = db.execute("SELECT * FROM reviews WHERE booking_id=?", (booking_id,)).fetchone()
                 return self.reply(200, row_dict(row)) if row else self.reply(404, {"error": "Review not found"})
+            if parsed.path == "/api/reviews" and "cleaner_id" in query:
+                user = self.require_user(db, "admin", "cleaner")
+                if user is None:
+                    return
+                try:
+                    cleaner_id = int(query["cleaner_id"][0])
+                except ValueError:
+                    return self.reply(400, {"error": "Invalid cleaner id"})
+                if user["role"] == "cleaner" and user["id"] != cleaner_id:
+                    return self.reply(403, {"error": "Forbidden"})
+                rows = db.execute("""
+                  SELECT reviews.* FROM reviews
+                  INNER JOIN bookings ON bookings.id = reviews.booking_id
+                  WHERE bookings.cleaner_id=?
+                  ORDER BY reviews.created_at DESC
+                """, (cleaner_id,)).fetchall()
+                return self.reply(200, [row_dict(row) for row in rows])
             if parsed.path == "/api/products":
                 rows = db.execute("SELECT * FROM products ORDER BY id").fetchall()
                 if not rows:
@@ -590,37 +643,44 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {"message": "Reset request accepted"}) if exists else self.reply(404, {"error": "Account not found"})
             if parsed.path == "/api/cleaner-applications":
                 email = data.get("email", "").strip().lower()
+                password = data.get("password", "")
                 if not valid_email(email):
                     return self.reply(400, {"error": "Enter a valid email"})
+                if len(password) < 6:
+                    return self.reply(400, {"error": "Password must be at least 6 characters"})
                 if db.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone():
                     return self.reply(409, {"error": "Email is already registered"})
                 if db.execute("SELECT id FROM cleaner_applications WHERE lower(email)=? AND status='pending'", (email,)).fetchone():
                     return self.reply(409, {"error": "A pending application already exists for this email"})
                 stamp = now()
                 cursor = db.execute("""
-                  INSERT INTO cleaner_applications(full_name,email,phone,gender,address,work_experience,skills,available_days,available_time,profile_photo,id_document,status,admin_note,created_at,updated_at)
-                  VALUES(?,?,?,?,?,?,?,?,?,?,?,'pending','',?,?)
+                  INSERT INTO cleaner_applications(full_name,email,phone,gender,address,work_experience,skills,available_days,available_time,profile_photo,id_document,status,admin_note,password_hash,created_at,updated_at)
+                  VALUES(?,?,?,?,?,?,?,?,?,?,?,'pending','',?,?,?)
                 """, (
                     data.get("full_name", ""), email, data.get("phone", ""),
                     data.get("gender", ""), data.get("address", ""),
                     data.get("work_experience", ""), data.get("skills", ""),
                     data.get("available_days", ""), data.get("available_time", ""),
                     data.get("profile_photo", ""), data.get("id_document", ""),
-                    stamp, stamp,
+                    hash_password(password), stamp, stamp,
                 ))
                 notify_admins(db, "Cleaner application", f"{data.get('full_name', 'A cleaner')} applied to join CleanNow.")
                 row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (cursor.lastrowid,)).fetchone()
-                return self.reply(201, row_dict(row))
+                return self.reply(201, cleaner_application_dict(row))
             if parsed.path == "/api/admin/cleaners":
                 admin = self.require_user(db, "admin")
                 if admin is None:
                     return
                 email = data.get("email", "").strip().lower()
+                password = data.get("password", "")
                 if not valid_email(email):
                     return self.reply(400, {"error": "Enter a valid email"})
+                if len(password) < 6:
+                    return self.reply(400, {"error": "Password must be at least 6 characters"})
                 if db.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone():
                     return self.reply(409, {"error": "Email is already registered"})
                 stamp = now()
+                password_hash = hash_password(password)
                 cursor = db.execute("""
                   INSERT INTO users(firebase_uid,full_name,email,phone,role,address,hourly_rate,is_active,status,availability_status,created_at,updated_at,password_hash)
                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -628,25 +688,25 @@ class Handler(BaseHTTPRequestHandler):
                     f"cleaner-{uuid.uuid4()}", data.get("full_name", ""), email,
                     data.get("phone", ""), "cleaner", data.get("address", ""), 10,
                     1, "active", "Available", stamp, stamp,
-                    hash_password(data.get("password", "Cleaner@123")),
+                    password_hash,
                 ))
                 user_id = cursor.lastrowid
                 application_cursor = db.execute("""
-                  INSERT INTO cleaner_applications(full_name,email,phone,gender,address,work_experience,skills,available_days,available_time,profile_photo,id_document,status,admin_note,user_id,created_at,updated_at)
-                  VALUES(?,?,?,?,?,?,?,?,?,?,?,'approved','Added by admin',?,?,?)
+                  INSERT INTO cleaner_applications(full_name,email,phone,gender,address,work_experience,skills,available_days,available_time,profile_photo,id_document,status,admin_note,user_id,password_hash,created_at,updated_at)
+                  VALUES(?,?,?,?,?,?,?,?,?,?,?,'approved','Added by admin',?,?,?,?)
                 """, (
                     data.get("full_name", ""), email, data.get("phone", ""),
                     data.get("gender", ""), data.get("address", ""),
                     data.get("work_experience", ""), data.get("skills", ""),
                     data.get("available_days", ""), data.get("available_time", ""),
                     data.get("profile_photo", ""), data.get("id_document", ""),
-                    user_id, stamp, stamp,
+                    user_id, password_hash, stamp, stamp,
                 ))
                 row = db.execute(
                     "SELECT * FROM cleaner_applications WHERE id=?",
                     (application_cursor.lastrowid,),
                 ).fetchone()
-                return self.reply(201, row_dict(row))
+                return self.reply(201, cleaner_application_dict(row))
             if parsed.path.startswith("/api/admin/cleaner-applications/") and parsed.path.endswith("/approve"):
                 admin = self.require_user(db, "admin")
                 if admin is None:
@@ -660,13 +720,19 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(404, {"error": "Application not found"})
                 if application["status"] != "pending":
                     return self.reply(409, {"error": "Application has already been reviewed"})
+                if not application["password_hash"]:
+                    return self.reply(409, {"error": "This older application has no password. Ask the cleaner to apply again."})
                 stamp = now()
                 existing = db.execute("SELECT * FROM users WHERE lower(email)=?", (application["email"].lower(),)).fetchone()
                 if existing:
                     db.execute("""
-                      UPDATE users SET role='cleaner',status='active',is_active=1,full_name=?,phone=?,address=?,updated_at=?
+                      UPDATE users SET role='cleaner',status='active',is_active=1,full_name=?,phone=?,address=?,password_hash=?,updated_at=?
                       WHERE id=?
-                    """, (application["full_name"], application["phone"], application["address"], stamp, existing["id"]))
+                    """, (
+                        application["full_name"], application["phone"],
+                        application["address"], application["password_hash"],
+                        stamp, existing["id"],
+                    ))
                     user_id = existing["id"]
                 else:
                     cursor = db.execute("""
@@ -675,12 +741,18 @@ class Handler(BaseHTTPRequestHandler):
                     """, (
                         f"cleaner-{uuid.uuid4()}", application["full_name"], application["email"],
                         application["phone"], "cleaner", application["address"], 10, 1, "active",
-                        "Available", stamp, stamp, hash_password(data.get("password", "Cleaner@123")),
+                        "Available", stamp, stamp, application["password_hash"],
                     ))
                     user_id = cursor.lastrowid
                 db.execute("UPDATE cleaner_applications SET status='approved',user_id=?,updated_at=? WHERE id=?", (user_id, stamp, application_id))
+                notify(
+                    db,
+                    user_id,
+                    "Application approved",
+                    "Your cleaner application has been approved. You can now sign in.",
+                )
                 row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()
-                return self.reply(200, row_dict(row))
+                return self.reply(200, cleaner_application_dict(row))
             if parsed.path.startswith("/api/admin/cleaner-applications/") and parsed.path.endswith("/reject"):
                 admin = self.require_user(db, "admin")
                 if admin is None:
@@ -696,7 +768,7 @@ class Handler(BaseHTTPRequestHandler):
                     "UPDATE cleaner_applications SET status='rejected',admin_note=?,updated_at=? WHERE id=?",
                     (data.get("admin_note", ""), now(), application_id),
                 )
-                return self.reply(200, row_dict(db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()))
+                return self.reply(200, cleaner_application_dict(db.execute("SELECT * FROM cleaner_applications WHERE id=?", (application_id,)).fetchone()))
             if parsed.path == "/api/users/upsert":
                 current = self.require_user(db)
                 if current is None:
@@ -731,7 +803,7 @@ class Handler(BaseHTTPRequestHandler):
                     data.get("hourly_rate", 8), data.get("is_active", 1),
                     data.get("status", "active" if data.get("is_active", 1) else "inactive"),
                     data.get("availability_status", "Available"), stamp, stamp,
-                    hash_password(data.get("password", "demo123")),
+                    hash_password(data.get("password") or secrets.token_urlsafe(32)),
                 ))
                 row = db.execute("SELECT * FROM users WHERE firebase_uid=?", (data["firebase_uid"],)).fetchone()
                 return self.reply(200, user_dict(row))

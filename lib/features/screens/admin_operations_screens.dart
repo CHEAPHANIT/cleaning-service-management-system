@@ -580,22 +580,24 @@ class AdminFinanceScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final liveBookings = context.watch<BookingProvider>().bookings;
     final adminData = context.watch<AdminDataProvider>();
-    final bookings = liveBookings.isEmpty
-        ? _demoAdminManagementBookings
-        : liveBookings;
+    final bookings = liveBookings;
     final completed = bookings.where((item) => item.status == 'Completed');
     final liveRevenue = completed.fold<double>(
       0,
       (sum, item) => sum + item.totalPrice,
     );
-    final totalRevenue = liveRevenue == 0 ? 28450.0 : liveRevenue;
+    final totalRevenue = liveRevenue;
     final customers = adminData.users
         .where((item) => item.role == 'customer')
         .length;
     final activeCleaners = adminData.cleaners
         .where((item) => item.isActive)
         .length;
-    final performers = _adminPerformers(adminData.cleaners, liveBookings);
+    final performers = _adminPerformers(
+      adminData.cleaners,
+      liveBookings,
+      adminData.cleanerReviews,
+    );
     return Scaffold(
       backgroundColor: Colors.white,
       body: ListView(
@@ -635,7 +637,7 @@ class AdminFinanceScreen extends StatelessWidget {
                   iconColor: const Color(0xFF168BDB),
                   label: 'Total Revenue',
                   value: _adminMoney(totalRevenue),
-                  trend: '+ 24.8%',
+                  trend: 'Completed jobs',
                 ),
               ),
               const SizedBox(width: 10),
@@ -644,8 +646,8 @@ class AdminFinanceScreen extends StatelessWidget {
                   icon: Icons.calendar_today_outlined,
                   iconColor: const Color(0xFF2F80ED),
                   label: 'Total Bookings',
-                  value: '${liveBookings.isEmpty ? 248 : bookings.length}',
-                  trend: '+ 12.5%',
+                  value: '${bookings.length}',
+                  trend: 'Live data',
                 ),
               ),
             ],
@@ -658,10 +660,8 @@ class AdminFinanceScreen extends StatelessWidget {
                   icon: Icons.groups_2_outlined,
                   iconColor: const Color(0xFFB642F5),
                   label: 'Active Customers',
-                  value: NumberFormat.decimalPattern().format(
-                    customers == 0 ? 1247 : customers,
-                  ),
-                  trend: '+ 18.2%',
+                  value: NumberFormat.decimalPattern().format(customers),
+                  trend: 'Live data',
                 ),
               ),
               const SizedBox(width: 10),
@@ -670,8 +670,8 @@ class AdminFinanceScreen extends StatelessWidget {
                   icon: Icons.person_search_outlined,
                   iconColor: const Color(0xFFFF6A00),
                   label: 'Active Cleaners',
-                  value: '${activeCleaners == 0 ? 32 : activeCleaners}',
-                  trend: '+ 2',
+                  value: '$activeCleaners',
+                  trend: 'Live data',
                 ),
               ),
             ],
@@ -696,7 +696,12 @@ class AdminFinanceScreen extends StatelessWidget {
           const SizedBox(height: 16),
           const _AdminDashboardTitle('Top Performing Cleaners'),
           const SizedBox(height: 10),
-          _AdminPerformerList(performers: performers),
+          if (performers.isEmpty)
+            const _AdminDashboardEmpty(
+              message: 'No cleaner has completed a job yet.',
+            )
+          else
+            _AdminPerformerList(performers: performers),
           const SizedBox(height: 18),
           GridView.count(
             crossAxisCount: 2,

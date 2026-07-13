@@ -123,6 +123,7 @@ class CleanerApplicationModel {
     required this.skills,
     required this.availableDays,
     required this.availableTime,
+    this.password = '',
     this.profilePhoto = '',
     this.idDocument = '',
     this.status = 'pending',
@@ -142,6 +143,10 @@ class CleanerApplicationModel {
   final String skills;
   final String availableDays;
   final String availableTime;
+
+  /// Write-only credential used when submitting or directly creating a cleaner.
+  /// The API never returns this value.
+  final String password;
   final String profilePhoto;
   final String idDocument;
   final String status;
@@ -162,6 +167,7 @@ class CleanerApplicationModel {
         skills: json['skills']?.toString() ?? '',
         availableDays: json['available_days']?.toString() ?? '',
         availableTime: json['available_time']?.toString() ?? '',
+        password: '',
         profilePhoto: json['profile_photo']?.toString() ?? '',
         idDocument: json['id_document']?.toString() ?? '',
         status: json['status']?.toString() ?? 'pending',
@@ -182,6 +188,7 @@ class CleanerApplicationModel {
     'skills': skills,
     'available_days': availableDays,
     'available_time': availableTime,
+    if (password.isNotEmpty) 'password': password,
     'profile_photo': profilePhoto,
     'id_document': idDocument,
     'status': status,

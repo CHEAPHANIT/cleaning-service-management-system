@@ -30,27 +30,25 @@ class AdminDashboardScreen extends StatelessWidget {
     final customers = adminData.users
         .where((item) => item.role == 'customer')
         .length;
-    final visibleBookings = bookings.isEmpty
-        ? _demoAdminBookings
-        : bookings
-              .take(5)
-              .map(
-                (booking) => _AdminBookingPreview(
-                  serviceName: booking.serviceName,
-                  customerName: booking.customerName,
-                  cleanerName: booking.cleanerName.isEmpty
-                      ? 'Not Assigned'
-                      : booking.cleanerName,
-                  status: booking.status,
-                  price: booking.totalPrice,
-                ),
-              )
-              .toList();
-    final performers = _adminPerformers(adminData.cleaners, bookings);
-    final totalBookings = bookings.isEmpty ? 248 : bookings.length;
-    final dashboardCleaners = activeCleaners == 0 ? 32 : activeCleaners;
-    final dashboardCustomers = customers == 0 ? 1247 : customers;
-    final dashboardRevenue = completedRevenue == 0 ? 28450.0 : completedRevenue;
+    final visibleBookings = bookings
+        .take(5)
+        .map(
+          (booking) => _AdminBookingPreview(
+            serviceName: booking.serviceName,
+            customerName: booking.customerName,
+            cleanerName: booking.cleanerName.isEmpty
+                ? 'Not Assigned'
+                : booking.cleanerName,
+            status: booking.status,
+            price: booking.totalPrice,
+          ),
+        )
+        .toList();
+    final performers = _adminPerformers(
+      adminData.cleaners,
+      bookings,
+      adminData.cleanerReviews,
+    );
     final user = context.watch<AuthProvider>().user;
     return Scaffold(
       backgroundColor: Colors.white,
@@ -79,8 +77,10 @@ class AdminDashboardScreen extends StatelessWidget {
                     icon: Icons.calendar_today_outlined,
                     iconColor: const Color(0xFF2F80ED),
                     label: 'Total Bookings',
-                    value: NumberFormat.decimalPattern().format(totalBookings),
-                    trend: '+ 12.5%',
+                    value: NumberFormat.decimalPattern().format(
+                      bookings.length,
+                    ),
+                    trend: 'Live data',
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -89,8 +89,8 @@ class AdminDashboardScreen extends StatelessWidget {
                     icon: Icons.person_search_outlined,
                     iconColor: const Color(0xFF168BDB),
                     label: 'Active Cleaners',
-                    value: '$dashboardCleaners',
-                    trend: '+ 2',
+                    value: '$activeCleaners',
+                    trend: 'Live data',
                   ),
                 ),
               ],
@@ -103,10 +103,8 @@ class AdminDashboardScreen extends StatelessWidget {
                     icon: Icons.groups_2_outlined,
                     iconColor: const Color(0xFFB642F5),
                     label: 'Total Customers',
-                    value: NumberFormat.decimalPattern().format(
-                      dashboardCustomers,
-                    ),
-                    trend: '+ 18.2%',
+                    value: NumberFormat.decimalPattern().format(customers),
+                    trend: 'Live data',
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -115,8 +113,8 @@ class AdminDashboardScreen extends StatelessWidget {
                     icon: Icons.attach_money,
                     iconColor: const Color(0xFF0D83D8),
                     label: 'Monthly Revenue',
-                    value: _adminMoney(dashboardRevenue),
-                    trend: '+ 24.8%',
+                    value: _adminMoney(completedRevenue),
+                    trend: 'Completed jobs',
                   ),
                 ),
               ],
@@ -124,19 +122,29 @@ class AdminDashboardScreen extends StatelessWidget {
             const SizedBox(height: 22),
             const _AdminDashboardTitle('Recent Bookings'),
             const SizedBox(height: 10),
-            for (final booking in visibleBookings)
-              _AdminBookingCard(booking: booking),
+            if (visibleBookings.isEmpty)
+              const _AdminDashboardEmpty(
+                message: 'No bookings have been created yet.',
+              )
+            else
+              for (final booking in visibleBookings)
+                _AdminBookingCard(booking: booking),
             const SizedBox(height: 12),
             const _AdminDashboardTitle('Top Performers'),
             const SizedBox(height: 10),
-            _AdminPerformerList(performers: performers),
+            if (performers.isEmpty)
+              const _AdminDashboardEmpty(
+                message: 'No cleaner has completed a job yet.',
+              )
+            else
+              _AdminPerformerList(performers: performers),
             const SizedBox(height: 18),
             Row(
               children: [
                 Expanded(
                   child: _AdminSummaryTile(
                     icon: Icons.schedule_outlined,
-                    value: bookings.isEmpty ? 23 : pending,
+                    value: pending,
                     label: 'Pending\nAssignments',
                     color: const Color(0xFF1D92E6),
                   ),
@@ -145,7 +153,7 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _AdminSummaryTile(
                     icon: Icons.check_circle_outline,
-                    value: bookings.isEmpty ? 186 : completed,
+                    value: activeBookings > 0 ? activeBookings : completed,
                     label: activeBookings > 0
                         ? 'Active\nBookings'
                         : 'Completed Today',
@@ -188,62 +196,49 @@ class _AdminPerformer {
   final String name;
   final int jobs;
   final double earnings;
-  final double rating;
+  final double? rating;
 }
-
-const _demoAdminBookings = [
-  _AdminBookingPreview(
-    serviceName: 'Deep Cleaning',
-    customerName: 'John Doe',
-    cleanerName: 'Sarah Johnson',
-    status: 'Completed',
-    price: 129,
-  ),
-  _AdminBookingPreview(
-    serviceName: 'Home Cleaning',
-    customerName: 'Jane Smith',
-    cleanerName: 'Mike Chen',
-    status: 'In Progress',
-    price: 79,
-  ),
-  _AdminBookingPreview(
-    serviceName: 'Office Cleaning',
-    customerName: 'Bob Wilson',
-    cleanerName: 'Not Assigned',
-    status: 'Pending',
-    price: 99,
-  ),
-  _AdminBookingPreview(
-    serviceName: 'Sofa Cleaning',
-    customerName: 'Alice Brown',
-    cleanerName: 'Emily Davis',
-    status: 'Accepted',
-    price: 39,
-  ),
-];
-
-const _demoAdminPerformers = [
-  _AdminPerformer(name: 'Sarah Johnson', jobs: 45, earnings: 5670, rating: 4.9),
-  _AdminPerformer(name: 'Mike Chen', jobs: 42, earnings: 5320, rating: 4.8),
-  _AdminPerformer(name: 'Emily Davis', jobs: 38, earnings: 4940, rating: 4.7),
-];
 
 List<_AdminPerformer> _adminPerformers(
   List<UserModel> cleaners,
   List<BookingModel> bookings,
+  Map<int, List<ReviewModel>> reviewsByCleaner,
 ) {
-  if (cleaners.isEmpty) return _demoAdminPerformers;
-  final performers = <_AdminPerformer>[
-    for (final cleaner in cleaners)
-      _AdminPerformer(
-        name: cleaner.fullName,
-        jobs: bookings.where((item) => item.cleanerId == cleaner.id).length,
-        earnings: bookings
-            .where((item) => item.cleanerId == cleaner.id)
-            .fold<double>(0, (sum, item) => sum + item.cleanerPay),
-        rating: 4.9 - (cleaners.indexOf(cleaner) * 0.1),
-      ),
-  ]..sort((a, b) => b.jobs.compareTo(a.jobs));
+  final performers =
+      <_AdminPerformer>[
+        for (final cleaner in cleaners)
+          if (bookings.any(
+            (item) =>
+                item.cleanerId == cleaner.id && item.status == 'Completed',
+          ))
+            _AdminPerformer(
+              name: cleaner.fullName,
+              jobs: bookings
+                  .where(
+                    (item) =>
+                        item.cleanerId == cleaner.id &&
+                        item.status == 'Completed',
+                  )
+                  .length,
+              earnings: bookings
+                  .where(
+                    (item) =>
+                        item.cleanerId == cleaner.id &&
+                        item.status == 'Completed',
+                  )
+                  .fold<double>(0, (sum, item) => sum + item.cleanerPay),
+              rating: (reviewsByCleaner[cleaner.id] ?? const []).isEmpty
+                  ? null
+                  : (reviewsByCleaner[cleaner.id] ?? const []).fold<int>(
+                          0,
+                          (sum, review) => sum + review.rating,
+                        ) /
+                        (reviewsByCleaner[cleaner.id] ?? const []).length,
+            ),
+      ]..sort((a, b) {
+        final jobs = b.jobs.compareTo(a.jobs);
+        return jobs != 0 ? jobs : b.earnings.compareTo(a.earnings);
+      });
   return performers.take(3).toList();
 }
 
@@ -272,15 +267,11 @@ class _AdminPageTop extends StatelessWidget {
       children: [
         Row(
           children: [
-            const _AppLogoMark(
-              size: 30,
-              primary: AppColors.primaryDark,
-              secondary: AppColors.primary,
-            ),
+            const _AppLogoMark(size: 30),
             const SizedBox(width: 8),
             const Expanded(
               child: Text(
-                'CleanPro',
+                AppStrings.appName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -413,6 +404,28 @@ class _AdminDashboardTitle extends StatelessWidget {
     style: Theme.of(context).textTheme.titleMedium?.copyWith(
       fontWeight: FontWeight.w900,
       color: AppColors.text,
+    ),
+  );
+}
+
+class _AdminDashboardEmpty extends StatelessWidget {
+  const _AdminDashboardEmpty({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFDDE6EE)),
+    ),
+    child: Text(
+      message,
+      textAlign: TextAlign.center,
+      style: const TextStyle(color: AppColors.muted),
     ),
   );
 }
@@ -668,10 +681,16 @@ class _AdminPerformerRow extends StatelessWidget {
             ],
           ),
         ),
-        const Icon(Icons.star_rounded, color: Color(0xFFFFB000), size: 18),
+        Icon(
+          Icons.star_rounded,
+          color: performer.rating == null
+              ? AppColors.muted
+              : const Color(0xFFFFB000),
+          size: 18,
+        ),
         const SizedBox(width: 2),
         Text(
-          performer.rating.toStringAsFixed(1),
+          performer.rating?.toStringAsFixed(1) ?? '—',
           style: const TextStyle(fontWeight: FontWeight.w900),
         ),
       ],

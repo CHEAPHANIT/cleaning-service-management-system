@@ -209,9 +209,77 @@ class _CleanerApplicationCard extends StatelessWidget {
   );
 }
 
-class AdminCleanerApplicationDetailScreen extends StatelessWidget {
+class AdminCleanerApplicationDetailScreen extends StatefulWidget {
   const AdminCleanerApplicationDetailScreen({super.key});
   static const route = '/admin/cleaner-applications/detail';
+
+  @override
+  State<AdminCleanerApplicationDetailScreen> createState() =>
+      _AdminCleanerApplicationDetailScreenState();
+}
+
+class _AdminCleanerApplicationDetailScreenState
+    extends State<AdminCleanerApplicationDetailScreen> {
+  bool processing = false;
+
+  Future<void> _approve(CleanerApplicationModel application) async {
+    if (processing) return;
+    setState(() => processing = true);
+    try {
+      await context.read<AdminDataProvider>().approveCleanerApplication(
+        application,
+      );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context, true);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '${application.fullName} has been approved as a cleaner.',
+            ),
+            backgroundColor: const Color(0xFF15966A),
+          ),
+        );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => processing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_cleanerApplicationError(error)),
+          backgroundColor: const Color(0xFFC43D3D),
+        ),
+      );
+    }
+  }
+
+  Future<void> _reject(CleanerApplicationModel application) async {
+    if (processing) return;
+    setState(() => processing = true);
+    try {
+      await context.read<AdminDataProvider>().rejectCleanerApplication(
+        application,
+      );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context, true);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${application.fullName} has been rejected.')),
+        );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => processing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_cleanerApplicationError(error)),
+          backgroundColor: const Color(0xFFC43D3D),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -271,25 +339,23 @@ class AdminCleanerApplicationDetailScreen extends StatelessWidget {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () async {
-                      await context
-                          .read<AdminDataProvider>()
-                          .approveCleanerApplication(application);
-                      if (context.mounted) Navigator.pop(context);
-                    },
-                    icon: const Icon(Icons.check_rounded),
-                    label: const Text('Approve'),
+                    onPressed: processing ? null : () => _approve(application),
+                    icon: processing
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_rounded),
+                    label: Text(processing ? 'Processing...' : 'Approve'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await context
-                          .read<AdminDataProvider>()
-                          .rejectCleanerApplication(application);
-                      if (context.mounted) Navigator.pop(context);
-                    },
+                    onPressed: processing ? null : () => _reject(application),
                     icon: const Icon(Icons.close_rounded),
                     label: const Text('Reject'),
                   ),
@@ -301,6 +367,11 @@ class AdminCleanerApplicationDetailScreen extends StatelessWidget {
     );
   }
 }
+
+String _cleanerApplicationError(Object error) => error
+    .toString()
+    .replaceFirst('AppException: ', '')
+    .replaceFirst('Exception: ', '');
 
 class _ApplicationDetailRow extends StatelessWidget {
   const _ApplicationDetailRow(this.label, this.value);

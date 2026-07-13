@@ -148,22 +148,15 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> loginDemoRole(String role) async {
     return _run(() async {
       final normalizedRole = role.toLowerCase();
+      if (normalizedRole != 'admin') {
+        throw AppException('Only the administrator demo account is available.');
+      }
       if (repository.apiEnabled) {
-        final email = switch (normalizedRole) {
-          'admin' => 'admin@example.com',
-          'cleaner' => 'cleaner@example.com',
-          _ => 'customer@example.com',
-        };
-        final password = switch (normalizedRole) {
-          'admin' => 'Admin@123',
-          'cleaner' => 'Cleaner@123',
-          _ => 'Customer@123',
-        };
-        user = await repository.login(email, password);
+        user = await repository.login('admin@example.com', 'Admin@123');
         await _saveSession();
         return;
       }
-      final uid = 'demo-$normalizedRole';
+      const uid = 'demo-admin';
       final savedUser = await database.getUserByUid(uid);
       if (savedUser != null) {
         user = savedUser;
@@ -171,14 +164,10 @@ class AuthProvider extends ChangeNotifier {
       }
       final model = UserModel(
         firebaseUid: uid,
-        fullName: switch (normalizedRole) {
-          'admin' => 'Admin Demo',
-          'cleaner' => 'Cleaner Demo',
-          _ => 'Demo Customer',
-        },
-        email: '$normalizedRole@cleannow.demo',
+        fullName: 'Admin Demo',
+        email: 'admin@cleannow.demo',
         phone: '+855 123 456 789',
-        role: normalizedRole,
+        role: 'admin',
       );
       user = model.copyWith(id: await database.upsertUser(model));
       await _saveSession();
@@ -499,7 +488,9 @@ class BookingProvider extends ChangeNotifier {
   Future<void> updateDocumentation(BookingModel booking) async {
     await database.updateBookingDocumentation(booking);
     final index = bookings.indexWhere((item) => item.id == booking.id);
-    if (index >= 0) bookings[index] = booking;
+    if (index >= 0) {
+      bookings[index] = booking.copyWith(status: bookings[index].status);
+    }
     notifyListeners();
   }
 
@@ -549,6 +540,7 @@ class AdminDataProvider extends ChangeNotifier {
   List<UserModel> users = [];
   List<UserModel> cleaners = [];
   List<CleanerApplicationModel> cleanerApplications = [];
+  Map<int, List<ReviewModel>> cleanerReviews = {};
   Timer? _realtimeTimer;
   bool _realtimeSyncing = false;
 
@@ -604,6 +596,11 @@ class AdminDataProvider extends ChangeNotifier {
     users = await database.users();
     cleaners = await database.cleaners();
     cleanerApplications = await database.cleanerApplications();
+    cleanerReviews = {
+      for (final cleaner in cleaners)
+        if (cleaner.id != null)
+          cleaner.id!: await database.reviewsForCleaner(cleaner.id!),
+    };
     loading = false;
     notifyListeners();
   }

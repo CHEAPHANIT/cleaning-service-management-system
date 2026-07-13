@@ -18,10 +18,7 @@ http://localhost:8080/docs
 The OpenAPI 3 specification is served at `http://localhost:8080/openapi.json`.
 Swagger's **Try it out** actions call the current server directly.
 
-Demo cleaner accounts:
-
-- `cleaner@cleannow.demo` / `demo123`
-- `sokha@cleannow.demo` / `demo123`
+Cleaner credentials are chosen in the cleaner application form and become active after administrator approval. Only the administrator demo credential is seeded.
 
 For another host or port, run Flutter with:
 

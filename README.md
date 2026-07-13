@@ -184,10 +184,8 @@ Allow port `8080` through the firewall when testing from another device. Do not 
 | Role | Email | Password |
 | --- | --- | --- |
 | Administrator | `admin@cleannow.demo` | `demo123` |
-| Cleaner | `cleaner@cleannow.demo` | `demo123` |
-| Cleaner | `sokha@cleannow.demo` | `demo123` |
 
-The sign-in screen also provides quick administrator and cleaner demo actions. Register a new account to test the customer journey.
+Cleaner credentials are created by each applicant in the cleaner application form and become active after admin approval. Register a new account to test the customer journey.
 
 ## How to Test the Complete System
 

@@ -6,6 +6,7 @@ import 'package:clean_now/data/repositories/repositories.dart';
 import 'package:clean_now/features/screens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -347,10 +348,12 @@ void main() {
       ),
     );
 
-    expect(find.text('CleanPro'), findsOneWidget);
+    expect(find.text('CleanNow'), findsOneWidget);
     expect(find.text("Today's Jobs"), findsOneWidget);
-    expect(find.text('Deep Cleaning'), findsOneWidget);
-    expect(find.text('View Details →'), findsWidgets);
+    expect(find.text('No assigned jobs'), findsOneWidget);
+    expect(find.text('Deep Cleaning'), findsNothing);
+    expect(find.text('View Details →'), findsNothing);
+    expect(find.text('\$0.00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -418,6 +421,8 @@ void main() {
     expect(find.text('Add After Photos'), findsOneWidget);
     expect(find.text('Save Documentation'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
+    expect(find.text('← Back'), findsNothing);
+    expect(find.text('Update'), findsOneWidget);
 
     for (final status in [
       'On the Way',
@@ -460,8 +465,16 @@ void main() {
     );
 
     expect(find.text('Work Schedule'), findsOneWidget);
-    expect(find.text('June 2026'), findsOneWidget);
-    expect(find.textContaining('Jobs on June'), findsOneWidget);
+    expect(
+      find.text(DateFormat('MMMM y').format(DateTime.now())),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'Jobs on ${DateFormat('MMMM').format(DateTime.now())}',
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 

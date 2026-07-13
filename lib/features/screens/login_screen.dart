@@ -214,12 +214,7 @@ class _LoginHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            const _AppLogoMark(
-              size: 44,
-              primary: Colors.white,
-              secondary: Color(0xFFEAF6FF),
-              foreground: AppColors.primary,
-            ),
+            const _AppLogoMark(size: 44),
             const SizedBox(width: 10),
             const Text(
               AppStrings.appName,

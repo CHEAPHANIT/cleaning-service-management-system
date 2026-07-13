@@ -9,19 +9,10 @@ class CleanerDashboardScreen extends StatefulWidget {
 
 class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
   @override
-  void initState() {
-    super.initState();
-    _restoreDemoCleanerJobs().then((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final provider = context.watch<BookingProvider>();
-    final hasLiveData = provider.bookings.isNotEmpty;
-    final sourceJobs = hasLiveData ? provider.bookings : _demoCleanerJobs;
+    final sourceJobs = provider.bookings;
     final jobs = sourceJobs
         .where(
           (item) => [
@@ -48,18 +39,25 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
               child: Column(
                 children: [
-                  for (final booking in jobs)
-                    _CleanerJobCard(
-                      booking: booking,
-                      onViewDetails: () async {
-                        await Navigator.pushNamed(
-                          context,
-                          BookingDetailScreen.route,
-                          arguments: booking,
-                        );
-                        if (mounted) setState(() {});
-                      },
-                    ),
+                  if (jobs.isEmpty)
+                    const EmptyStateWidget(
+                      title: 'No assigned jobs',
+                      message: 'Your assigned jobs will appear here.',
+                      icon: Icons.work_outline_rounded,
+                    )
+                  else
+                    for (final booking in jobs)
+                      _CleanerJobCard(
+                        booking: booking,
+                        onViewDetails: () async {
+                          await Navigator.pushNamed(
+                            context,
+                            BookingDetailScreen.route,
+                            arguments: booking,
+                          );
+                          if (mounted) setState(() {});
+                        },
+                      ),
                 ],
               ),
             ),
@@ -78,14 +76,14 @@ class _CleanerPortalAppBar extends AppBar {
         titleSpacing: 4,
         title: const Row(
           children: [
-            _CleanerLogo(),
+            _AppLogoMark(size: 30),
             SizedBox(width: 8),
             Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'CleanPro',
+                  AppStrings.appName,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
                 ),
                 Text(
@@ -120,17 +118,6 @@ class _CleanerPortalAppBar extends AppBar {
           ),
         ],
       );
-}
-
-class _CleanerLogo extends StatelessWidget {
-  const _CleanerLogo();
-
-  @override
-  Widget build(BuildContext context) => const _AppLogoMark(
-    size: 30,
-    primary: Color(0xFF16B989),
-    secondary: Color(0xFF32D29B),
-  );
 }
 
 class _CleanerJobsSummary extends StatelessWidget {
@@ -397,131 +384,6 @@ class _CleanerJobInfo extends StatelessWidget {
   );
 }
 
-final _demoCleanerJobs = <BookingModel>[
-  const BookingModel(
-    id: 101,
-    userId: 11,
-    serviceId: 2,
-    serviceName: 'Deep Cleaning',
-    customerName: 'John Doe',
-    phone: '+1 555 0101',
-    address: '123 Main St, Apt 4B, New York, NY',
-    propertyType: 'Apartment',
-    rooms: 3,
-    bathrooms: 2,
-    bookingDate: '2026-06-20',
-    bookingTime: '10:00 AM',
-    extraServices: [],
-    specialInstruction:
-        'Please focus on kitchen and bathroom. Keys with doorman.',
-    paymentMethod: 'Cash',
-    basePrice: 129,
-    extraPrice: 0,
-    totalPrice: 129,
-    estimatedDuration: 240,
-    cleanerId: 2,
-    cleanerName: 'Cleaner Demo',
-    cleanerPay: 48,
-    status: 'Cleaner Assigned',
-  ),
-  const BookingModel(
-    id: 102,
-    userId: 12,
-    serviceId: 1,
-    serviceName: 'Home Cleaning',
-    customerName: 'Jane Smith',
-    phone: '+1 555 0102',
-    address: '456 Oak Ave, Brooklyn, NY',
-    propertyType: 'House',
-    rooms: 2,
-    bathrooms: 1,
-    bookingDate: '2026-06-20',
-    bookingTime: '02:00 PM',
-    extraServices: [],
-    paymentMethod: 'Card',
-    basePrice: 79,
-    extraPrice: 0,
-    totalPrice: 79,
-    estimatedDuration: 120,
-    cleanerId: 2,
-    cleanerName: 'Cleaner Demo',
-    cleanerPay: 24,
-    status: 'Cleaner Assigned',
-  ),
-  const BookingModel(
-    id: 103,
-    userId: 13,
-    serviceId: 3,
-    serviceName: 'Office Cleaning',
-    customerName: 'Tech Corp Inc',
-    phone: '+1 555 0103',
-    address: '789 Business Blvd, Manhattan, NY',
-    propertyType: 'Office',
-    rooms: 5,
-    bathrooms: 2,
-    bookingDate: '2026-06-20',
-    bookingTime: '09:00 AM',
-    extraServices: [],
-    paymentMethod: 'Card',
-    basePrice: 99,
-    extraPrice: 0,
-    totalPrice: 99,
-    estimatedDuration: 180,
-    cleanerId: 2,
-    cleanerName: 'Cleaner Demo',
-    cleanerPay: 36,
-    status: 'Cleaner Assigned',
-  ),
-];
-
-const _demoCleanerJobStoragePrefix = 'cleannow_demo_cleaner_job_';
-
-Future<void> _restoreDemoCleanerJobs() async {
-  try {
-    final preferences = await SharedPreferences.getInstance();
-    for (var index = 0; index < _demoCleanerJobs.length; index++) {
-      final id = _demoCleanerJobs[index].id;
-      if (id == null) continue;
-      var restored = _demoCleanerJobs[index];
-      final stored = preferences.getString('$_demoCleanerJobStoragePrefix$id');
-      if (stored != null && stored.isNotEmpty) {
-        try {
-          restored = BookingModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(stored) as Map),
-          );
-        } catch (_) {
-          // The lightweight status below can still be restored.
-        }
-      }
-      final storedStatus = preferences.getString(
-        '$_demoCleanerJobStoragePrefix${id}_status',
-      );
-      _demoCleanerJobs[index] = storedStatus == null
-          ? restored
-          : restored.copyWith(status: storedStatus);
-    }
-  } catch (_) {
-    // Keep the built-in demo jobs if browser storage is unavailable.
-  }
-}
-
-Future<void> _saveDemoCleanerJob(BookingModel booking) async {
-  if (booking.id == null) return;
-  try {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(
-      '$_demoCleanerJobStoragePrefix${booking.id}_status',
-      booking.status,
-    );
-    await preferences.setString(
-      '$_demoCleanerJobStoragePrefix${booking.id}',
-      jsonEncode(booking.toJson()),
-    );
-  } catch (_) {
-    // The in-memory update still keeps the current session consistent.
-  }
-}
-
 class CleanerScheduleScreen extends StatefulWidget {
   const CleanerScheduleScreen({super.key});
 
@@ -535,8 +397,7 @@ class _CleanerScheduleScreenState extends State<CleanerScheduleScreen> {
   bool initialized = false;
 
   List<BookingModel> _jobs(BuildContext context) {
-    final live = context.watch<BookingProvider>().bookings;
-    return live.isEmpty ? _demoCleanerJobs : live;
+    return context.watch<BookingProvider>().bookings;
   }
 
   @override
@@ -887,23 +748,71 @@ class _CleanerScheduleJobCard extends StatelessWidget {
   );
 }
 
-class CleanerProfileScreen extends StatelessWidget {
+class CleanerProfileScreen extends StatefulWidget {
   const CleanerProfileScreen({super.key});
+
+  @override
+  State<CleanerProfileScreen> createState() => _CleanerProfileScreenState();
+}
+
+class _CleanerProfileScreenState extends State<CleanerProfileScreen> {
+  int? loadedCleanerId;
+  List<ReviewModel> reviews = [];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final cleanerId = context.read<AuthProvider>().user?.id;
+    if (cleanerId == null || cleanerId == loadedCleanerId) return;
+    loadedCleanerId = cleanerId;
+    unawaited(_loadReviews(cleanerId));
+  }
+
+  Future<void> _loadReviews(int cleanerId) async {
+    try {
+      final items = await context
+          .read<BookingProvider>()
+          .database
+          .reviewsForCleaner(cleanerId);
+      if (mounted && loadedCleanerId == cleanerId) {
+        setState(() => reviews = items);
+      }
+    } catch (_) {
+      if (mounted && loadedCleanerId == cleanerId) {
+        setState(() => reviews = []);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final user = auth.user!;
-    final liveJobs = context.watch<BookingProvider>().bookings;
-    final jobs = liveJobs.isEmpty ? _demoCleanerJobs : liveJobs;
-    final completed = jobs.where((booking) => booking.status == 'Completed');
+    final jobs = context.watch<BookingProvider>().bookings;
+    final completed = jobs
+        .where((booking) => booking.status == 'Completed')
+        .toList();
     final completedCount = completed.length;
     final earned = completed.fold<double>(
       0,
       (sum, booking) => sum + booking.cleanerPay,
     );
-    final shownCompleted = completedCount == 0 ? 127 : completedCount;
-    final shownEarnings = earned == 0 ? 8450 : earned;
+    final finishedCount = jobs
+        .where(
+          (booking) => const [
+            'Completed',
+            'Cancelled',
+            'Rejected',
+          ].contains(booking.status),
+        )
+        .length;
+    final successRate = finishedCount == 0
+        ? 0
+        : (completedCount / finishedCount * 100).round();
+    final averageRating = reviews.isEmpty
+        ? null
+        : reviews.fold<int>(0, (sum, review) => sum + review.rating) /
+              reviews.length;
 
     return Scaffold(
       appBar: _CleanerPortalAppBar(auth: auth),
@@ -962,21 +871,27 @@ class CleanerProfileScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.star, color: Colors.white, size: 15),
-                              SizedBox(width: 4),
+                              Icon(
+                                Icons.star,
+                                color: averageRating == null
+                                    ? Colors.white54
+                                    : Colors.white,
+                                size: 15,
+                              ),
+                              const SizedBox(width: 4),
                               Text(
-                                '4.9',
-                                style: TextStyle(
+                                averageRating?.toStringAsFixed(1) ?? '—',
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                              SizedBox(width: 5),
+                              const SizedBox(width: 5),
                               Expanded(
                                 child: Text(
-                                  '(127 reviews)',
+                                  '(${reviews.length} ${reviews.length == 1 ? 'review' : 'reviews'})',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -999,15 +914,15 @@ class CleanerProfileScreen extends StatelessWidget {
                       child: _CleanerHeroMetric(
                         icon: Icons.calendar_today_outlined,
                         label: 'Jobs Completed',
-                        value: '$shownCompleted',
+                        value: '$completedCount',
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: _CleanerHeroMetric(
                         icon: Icons.star_outline,
                         label: 'Average Rating',
-                        value: '4.9',
+                        value: averageRating?.toStringAsFixed(1) ?? '—',
                       ),
                     ),
                   ],
@@ -1028,52 +943,64 @@ class CleanerProfileScreen extends StatelessWidget {
                         icon: Icons.attach_money_rounded,
                         iconColor: Color(0xFF20C77A),
                         label: 'Total Earnings',
-                        value: money(shownEarnings),
+                        value: money(earned),
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: _CleanerPerformanceCard(
                         icon: Icons.workspace_premium_outlined,
                         iconColor: Color(0xFF8B5CF6),
                         label: 'Success Rate',
-                        value: '98%',
+                        value: '$successRate%',
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
                 const _CleanerProfileTitle('Achievements'),
-                const Row(
-                  children: [
-                    Expanded(
-                      child: _CleanerAchievementCard(
-                        icon: Icons.emoji_events_outlined,
-                        color: Color(0xFFFFB020),
-                        title: 'Top Performer',
-                        description: 'Highest rating this month',
+                if (completedCount == 0)
+                  const Text(
+                    'Complete your first assigned job to earn achievements.',
+                    style: TextStyle(color: AppColors.muted, fontSize: 11),
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _CleanerAchievementCard(
+                          icon: Icons.emoji_events_outlined,
+                          color: const Color(0xFFFFB020),
+                          title: 'First Job',
+                          description: 'Completed the first job',
+                        ),
                       ),
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: _CleanerAchievementCard(
-                        icon: Icons.calendar_today_outlined,
-                        color: Color(0xFF3B82F6),
-                        title: '100 Jobs',
-                        description: 'Completed 100+ jobs',
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: _CleanerAchievementCard(
-                        icon: Icons.star_outline,
-                        color: Color(0xFF8B5CF6),
-                        title: 'Perfect Score',
-                        description: '10 consecutive 5-star ratings',
-                      ),
-                    ),
-                  ],
-                ),
+                      if (completedCount >= 10) ...[
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: _CleanerAchievementCard(
+                            icon: Icons.calendar_today_outlined,
+                            color: Color(0xFF3B82F6),
+                            title: '10 Jobs',
+                            description: 'Completed 10+ jobs',
+                          ),
+                        ),
+                      ],
+                      if (averageRating != null &&
+                          averageRating >= 4.8 &&
+                          reviews.length >= 5) ...[
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: _CleanerAchievementCard(
+                            icon: Icons.star_outline,
+                            color: Color(0xFF8B5CF6),
+                            title: 'Top Rated',
+                            description: '4.8+ from 5 reviews',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 const SizedBox(height: 20),
                 const _CleanerProfileTitle('Personal Information'),
                 Container(
@@ -1108,7 +1035,7 @@ class CleanerProfileScreen extends StatelessWidget {
                         icon: Icons.location_on_outlined,
                         label: 'Service Area',
                         value: user.address.isEmpty
-                            ? 'Manhattan, Brooklyn'
+                            ? 'No service area set'
                             : user.address,
                         onTap: () => Navigator.pushNamed(
                           context,
@@ -1120,24 +1047,21 @@ class CleanerProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 const _CleanerProfileTitle('Recent Reviews'),
-                const _CleanerPortalReviewCard(
-                  customer: 'John Doe',
-                  date: 'May 28, 2026',
-                  rating: 5,
-                  comment: 'Excellent service! Very thorough and professional.',
-                ),
-                const _CleanerPortalReviewCard(
-                  customer: 'Jane Smith',
-                  date: 'May 25, 2026',
-                  rating: 5,
-                  comment: 'Great attention to detail. Will book again!',
-                ),
-                const _CleanerPortalReviewCard(
-                  customer: 'Mike Chen',
-                  date: 'May 20, 2026',
-                  rating: 4,
-                  comment: 'Good job overall. Very punctual.',
-                ),
+                if (reviews.isEmpty)
+                  const Text(
+                    'No customer reviews yet.',
+                    style: TextStyle(color: AppColors.muted, fontSize: 11),
+                  )
+                else
+                  for (final review in reviews.take(3))
+                    _CleanerPortalReviewCard(
+                      customer: _cleanerReviewCustomer(review, jobs),
+                      date: _cleanerReviewDate(review),
+                      rating: review.rating,
+                      comment: review.comment.isEmpty
+                          ? 'No written comment.'
+                          : review.comment,
+                    ),
               ],
             ),
           ),
@@ -1366,6 +1290,20 @@ class _CleanerProfileInfoTile extends StatelessWidget {
       ),
     ),
   );
+}
+
+String _cleanerReviewCustomer(ReviewModel review, List<BookingModel> jobs) =>
+    jobs
+        .where((booking) => booking.id == review.bookingId)
+        .map((booking) => booking.customerName)
+        .firstOrNull ??
+    'Customer';
+
+String _cleanerReviewDate(ReviewModel review) {
+  final date = DateTime.tryParse(review.createdAt ?? '');
+  return date == null
+      ? 'Date unavailable'
+      : DateFormat('MMM d, y').format(date);
 }
 
 class _CleanerPortalReviewCard extends StatelessWidget {

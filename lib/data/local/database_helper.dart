@@ -39,7 +39,6 @@ class DatabaseHelper {
   int _webFavoriteId = 1;
   int _webReviewId = 1;
   int _webNotificationId = 1;
-  int _webCleanerApplicationId = 1;
   bool _webSyncInProgress = false;
 
   Future<void> initialize() async {
@@ -331,7 +330,6 @@ class DatabaseHelper {
     final stored = prefs.getString(_webCleanerApplicationsKey);
     if (stored == null || stored.isEmpty) {
       _webCleanerApplications.clear();
-      _webCleanerApplicationId = 1;
       return;
     }
     try {
@@ -345,15 +343,8 @@ class DatabaseHelper {
             ),
           ),
         );
-      _webCleanerApplicationId =
-          _webCleanerApplications.fold<int>(
-            0,
-            (largest, item) => (item.id ?? 0) > largest ? item.id! : largest,
-          ) +
-          1;
     } catch (_) {
       _webCleanerApplications.clear();
-      _webCleanerApplicationId = 1;
     }
   }
 
@@ -736,7 +727,12 @@ class DatabaseHelper {
   }
 
   Future<void> updateBookingStatus(int id, String status) async {
-    if (_apiEnabled && await _api.updateStatus(id, status)) return;
+    if (_apiEnabled) {
+      if (await _api.updateStatus(id, status)) return;
+      throw AppException(
+        'Could not update the job status. Refresh the task and try again.',
+      );
+    }
     if (kIsWeb) await syncWebData();
     final booking = await _bookingById(id);
     if (kIsWeb) {
@@ -783,7 +779,12 @@ class DatabaseHelper {
 
   Future<void> updateBookingDocumentation(BookingModel booking) async {
     if (booking.id == null) return;
-    if (_apiEnabled && await _api.updateDocumentation(booking)) return;
+    if (_apiEnabled) {
+      if (await _api.updateDocumentation(booking)) return;
+      throw AppException(
+        'Could not save the task documentation. Check the API connection.',
+      );
+    }
     if (kIsWeb) {
       await syncWebData();
       final index = _webBookings.indexWhere((item) => item.id == booking.id);
@@ -978,48 +979,33 @@ class DatabaseHelper {
   Future<int> saveCleanerApplication(
     CleanerApplicationModel application,
   ) async {
-    if (_apiEnabled) {
-      final remote = await _api.createCleanerApplication(application);
-      if (remote != null) return remote.id!;
-    }
-    final stamp = DateTime.now().toIso8601String();
-    if (kIsWeb) {
-      await _loadWebCleanerApplications();
-      final id = _webCleanerApplicationId++;
-      _webCleanerApplications.insert(
-        0,
-        CleanerApplicationModel.fromJson({
-          ...application.toJson(),
-          'id': id,
-          'status': 'pending',
-          'created_at': stamp,
-          'updated_at': stamp,
-        }),
+    if (!_apiEnabled) {
+      throw AppException(
+        'The CleanNow API must be running to create a secure cleaner account.',
       );
-      await _saveWebCleanerApplications();
-      return id;
     }
-    return (await database).insert(
-      'cleaner_applications',
-      application.toJson()
-        ..remove('id')
-        ..['status'] = 'pending'
-        ..['created_at'] = stamp
-        ..['updated_at'] = stamp,
-    );
+    final remote = await _api.createCleanerApplication(application);
+    if (remote == null) {
+      throw AppException(
+        'Could not submit the application. Check the email and API connection.',
+      );
+    }
+    return remote.id!;
   }
 
   Future<void> addCleanerFromApplication(
     CleanerApplicationModel application,
   ) async {
-    if (_apiEnabled) {
-      final remote = await _api.adminCreateCleaner(application);
-      if (remote != null) return;
+    if (!_apiEnabled) {
+      throw AppException(
+        'The CleanNow API must be running to create a secure cleaner account.',
+      );
     }
-    final id = await saveCleanerApplication(application);
-    final saved = (await cleanerApplications()).where((item) => item.id == id);
-    if (saved.isNotEmpty) {
-      await approveCleanerApplication(saved.first);
+    final remote = await _api.adminCreateCleaner(application);
+    if (remote == null) {
+      throw AppException(
+        'Could not add the cleaner. Check the email, password, and API connection.',
+      );
     }
   }
 
@@ -1043,41 +1029,16 @@ class DatabaseHelper {
     CleanerApplicationModel application,
   ) async {
     if (application.id == null) return;
-    if (_apiEnabled && await _api.approveCleanerApplication(application.id!)) {
-      return;
-    }
-    final stamp = DateTime.now().toIso8601String();
-    final user = UserModel(
-      firebaseUid: 'cleaner-${application.email.toLowerCase()}',
-      fullName: application.fullName,
-      email: application.email,
-      phone: application.phone,
-      role: 'cleaner',
-      address: application.address,
-      hourlyRate: 10,
-      status: 'active',
-    );
-    final userId = await upsertUser(user);
-    if (kIsWeb) {
-      final index = _webCleanerApplications.indexWhere(
-        (item) => item.id == application.id,
+    if (!_apiEnabled) {
+      throw AppException(
+        'The CleanNow API must be running to approve a cleaner account.',
       );
-      if (index >= 0) {
-        _webCleanerApplications[index] = CleanerApplicationModel.fromJson({
-          ...application.toJson(),
-          'status': 'approved',
-          'user_id': userId,
-          'updated_at': stamp,
-        });
-        await _saveWebCleanerApplications();
-      }
+    }
+    if (await _api.approveCleanerApplication(application.id!)) {
       return;
     }
-    await (await database).update(
-      'cleaner_applications',
-      {'status': 'approved', 'user_id': userId, 'updated_at': stamp},
-      where: 'id = ?',
-      whereArgs: [application.id],
+    throw AppException(
+      'Could not approve this application. Older applications without a password must be submitted again.',
     );
   }
 
@@ -1278,6 +1239,33 @@ class DatabaseHelper {
       limit: 1,
     );
     return rows.isEmpty ? null : ReviewModel.fromJson(rows.first);
+  }
+
+  Future<List<ReviewModel>> reviewsForCleaner(int cleanerId) async {
+    if (_apiEnabled) {
+      final remote = await _api.reviewsForCleaner(cleanerId);
+      if (remote != null) return remote;
+    }
+    if (kIsWeb) {
+      final bookingIds = _webBookings
+          .where((booking) => booking.cleanerId == cleanerId)
+          .map((booking) => booking.id)
+          .whereType<int>()
+          .toSet();
+      return _webReviews
+          .where((review) => bookingIds.contains(review.bookingId))
+          .toList();
+    }
+    final rows = await (await database).rawQuery(
+      '''
+      SELECT reviews.* FROM reviews
+      INNER JOIN bookings ON bookings.id = reviews.booking_id
+      WHERE bookings.cleaner_id = ?
+      ORDER BY reviews.created_at DESC
+      ''',
+      [cleanerId],
+    );
+    return rows.map(ReviewModel.fromJson).toList();
   }
 
   Future<void> addNotification(NotificationModel item) async {

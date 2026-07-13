@@ -272,22 +272,14 @@ class _CustomerBookingHeader extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded),
         ),
         const SizedBox(width: 10),
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1488DD),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-        ),
+        const _AppLogoMark(size: 38),
         const SizedBox(width: 12),
         const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'CleanPro',
+                AppStrings.appName,
                 style: TextStyle(
                   color: Color(0xFF081C33),
                   fontSize: 20,
@@ -1775,22 +1767,14 @@ PreferredSizeWidget _customerPortalAppBar(BuildContext context) => AppBar(
   titleSpacing: 24,
   title: Row(
     children: [
-      Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          color: const Color(0xFF0D83D8),
-          borderRadius: BorderRadius.circular(99),
-        ),
-        child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
-      ),
+      const _AppLogoMark(size: 30),
       const SizedBox(width: 10),
       const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'CleanPro',
+            AppStrings.appName,
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
           ),
           SizedBox(height: 2),
@@ -2820,45 +2804,71 @@ class _CleanerJobDetailViewState extends State<_CleanerJobDetailView> {
     _ => 0,
   };
 
-  Future<void> _advanceTo(int index) async {
-    if (updating || index != currentStep + 1 || index >= _steps.length) return;
+  Future<bool> _advanceTo(int index) async {
+    if (updating || index != currentStep + 1 || index >= _steps.length) {
+      return false;
+    }
     if (index == 4 && booking.afterPhotos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Upload an after photo before completing the job.'),
         ),
       );
-      return;
+      return false;
     }
+    final previousBooking = booking;
+    final previousStep = currentStep;
     final nextStatus = _steps[index].databaseStatus;
     setState(() {
       updating = true;
       currentStep = index;
       booking = booking.copyWith(status: nextStatus);
     });
-    if (index == 4) {
-      await _updateDemoBookingCache();
-    } else {
-      unawaited(_updateDemoBookingCache());
-    }
-    if (!mounted) return;
-
-    final provider = context.read<BookingProvider>();
-    final isPersistedJob = provider.bookings.any(
-      (item) => item.id == booking.id,
-    );
-    if (isPersistedJob) {
-      await provider.updateStatus(
-        booking,
-        nextStatus,
-        context.read<AuthProvider>().user!,
+    try {
+      final provider = context.read<BookingProvider>();
+      final isPersistedJob = provider.bookings.any(
+        (item) => item.id == previousBooking.id,
       );
+      if (isPersistedJob) {
+        await provider.updateStatus(
+          previousBooking,
+          nextStatus,
+          context.read<AuthProvider>().user!,
+        );
+      }
+      if (!mounted) return true;
+      final refreshed = provider.bookings
+          .where((item) => item.id == previousBooking.id)
+          .firstOrNull;
+      setState(() {
+        booking = refreshed ?? booking;
+        currentStep = _stepForStatus(booking.status);
+        updating = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Job updated to ${_steps[index].label}.')),
+      );
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      setState(() {
+        booking = previousBooking;
+        currentStep = previousStep;
+        updating = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error
+                .toString()
+                .replaceFirst('AppException: ', '')
+                .replaceFirst('ValidationException: ', ''),
+          ),
+          backgroundColor: const Color(0xFFC43D3D),
+        ),
+      );
+      return false;
     }
-    if (!mounted) return;
-    setState(() => updating = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Job updated to ${_steps[index].label}.')),
-    );
   }
 
   Future<void> _pickDocumentationPhotos({required bool before}) async {
@@ -2913,7 +2923,6 @@ class _CleanerJobDetailViewState extends State<_CleanerJobDetailView> {
 
   void _updateCompletionNotes(String value) {
     booking = booking.copyWith(completionNotes: value.trim());
-    unawaited(_updateDemoBookingCache());
     notesSaveTimer?.cancel();
     notesSaveTimer = Timer(
       const Duration(milliseconds: 450),
@@ -2922,12 +2931,23 @@ class _CleanerJobDetailViewState extends State<_CleanerJobDetailView> {
   }
 
   Future<void> _persistDocumentation() async {
-    await _updateDemoBookingCache();
-    if (!mounted) return;
     final provider = context.read<BookingProvider>();
     if (provider.bookings.any((item) => item.id == booking.id)) {
       await provider.updateDocumentation(booking);
     }
+  }
+
+  Future<void> _syncCurrentStatus() async {
+    final provider = context.read<BookingProvider>();
+    final persisted = provider.bookings
+        .where((item) => item.id == booking.id)
+        .firstOrNull;
+    if (persisted == null || persisted.status == booking.status) return;
+    await provider.updateStatus(
+      persisted,
+      booking.status,
+      context.read<AuthProvider>().user!,
+    );
   }
 
   Future<void> _saveDocumentationAndExit() async {
@@ -2947,8 +2967,15 @@ class _CleanerJobDetailViewState extends State<_CleanerJobDetailView> {
       booking = booking.copyWith(completionNotes: completionNotes.text.trim());
     });
     try {
+      await _syncCurrentStatus();
       await _persistDocumentation();
-      if (currentStep == 3) await _advanceTo(4);
+      if (currentStep == 3) {
+        final completed = await _advanceTo(4);
+        if (!completed) {
+          if (mounted) setState(() => savingDocumentation = false);
+          return;
+        }
+      }
       if (!mounted) return;
       Navigator.pop(context, booking);
     } catch (_) {
@@ -2957,14 +2984,6 @@ class _CleanerJobDetailViewState extends State<_CleanerJobDetailView> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not save the job documentation.')),
       );
-    }
-  }
-
-  Future<void> _updateDemoBookingCache() async {
-    final index = _demoCleanerJobs.indexWhere((item) => item.id == booking.id);
-    if (index >= 0) {
-      _demoCleanerJobs[index] = booking;
-      await _saveDemoCleanerJob(booking);
     }
   }
 
@@ -3096,31 +3115,14 @@ class _CleanerJobDetailHeader extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            InkWell(
-              onTap: () => Navigator.pop(context),
-              borderRadius: BorderRadius.circular(8),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  '← Back',
-                  style: TextStyle(
-                    color: AppColors.primaryDark,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const Spacer(),
-            Text(
-              'Job #${booking.id ?? '-'}',
-              style: const TextStyle(color: AppColors.muted, fontSize: 11),
-            ),
-          ],
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            'Job #${booking.id ?? '-'}',
+            style: const TextStyle(color: AppColors.muted, fontSize: 11),
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           booking.serviceName,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
@@ -3192,7 +3194,11 @@ class _CleanerTrackingStepTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: completed ? const Color(0xFFF0FCF8) : Colors.white,
+    color: completed
+        ? const Color(0xFFF0FCF8)
+        : enabled
+        ? const Color(0xFFF0F7FF)
+        : Colors.white,
     borderRadius: BorderRadius.circular(13),
     child: InkWell(
       onTap: enabled ? onTap : null,
@@ -3203,7 +3209,11 @@ class _CleanerTrackingStepTile extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(13),
           border: Border.all(
-            color: completed ? const Color(0xFF17CF91) : AppColors.border,
+            color: completed
+                ? const Color(0xFF17CF91)
+                : enabled
+                ? AppColors.primary
+                : AppColors.border,
             width: current ? 1.3 : 1,
           ),
         ),
@@ -3234,7 +3244,23 @@ class _CleanerTrackingStepTile extends StatelessWidget {
                 Icons.check_circle_outline_rounded,
                 color: Color(0xFF13CD8D),
                 size: 18,
+              )
+            else if (enabled) ...[
+              const Text(
+                'Update',
+                style: TextStyle(
+                  color: AppColors.primaryDark,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
+              const SizedBox(width: 2),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.primaryDark,
+                size: 18,
+              ),
+            ],
           ],
         ),
       ),
@@ -3629,22 +3655,28 @@ class _AdminBookingDetailView extends StatelessWidget {
         centerTitle: false,
         toolbarHeight: 66,
         titleSpacing: 32,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        title: const Row(
           children: [
-            Text(
-              '${AppStrings.appName} Admin',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              'Management Portal',
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
+            _AppLogoMark(size: 32),
+            SizedBox(width: 9),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  AppStrings.appName,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Management Portal',
+                  style: TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

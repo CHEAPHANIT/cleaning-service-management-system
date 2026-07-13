@@ -126,12 +126,8 @@ class CleanNowApi {
     }
   }
 
-  Future<bool> approveCleanerApplication(
-    int id, {
-    String password = 'Cleaner@123',
-  }) => _postOk('/admin/cleaner-applications/$id/approve', {
-    'password': password,
-  }, auth: true);
+  Future<bool> approveCleanerApplication(int id) =>
+      _postOk('/admin/cleaner-applications/$id/approve', {}, auth: true);
 
   Future<bool> rejectCleanerApplication(int id, {String note = ''}) => _postOk(
     '/admin/cleaner-applications/$id/reject',
@@ -317,6 +313,19 @@ class CleanNowApi {
     try {
       final response = await _dio.get('/reviews/booking/$bookingId');
       return ReviewModel.fromJson(_map(response.data));
+    } on DioException {
+      return null;
+    }
+  }
+
+  Future<List<ReviewModel>?> reviewsForCleaner(int cleanerId) async {
+    try {
+      final response = await _dio.get(
+        '/reviews',
+        queryParameters: {'cleaner_id': cleanerId},
+        options: _authOptions,
+      );
+      return _list(response.data).map(ReviewModel.fromJson).toList();
     } on DioException {
       return null;
     }

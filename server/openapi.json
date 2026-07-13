@@ -3,7 +3,7 @@
   "info": {
     "title": "CleanNow API",
     "version": "1.0.0",
-    "description": "REST API for CleanNow authentication, services, bookings, cleaners, favorites, reviews, notifications, addresses, and products. Use the demo accounts documented in the project README to try role-specific flows."
+    "description": "REST API for CleanNow authentication, services, bookings, cleaners, favorites, reviews, notifications, addresses, and products. Cleaner credentials are chosen during application and activated after admin approval."
   },
   "servers": [
     { "url": "/api", "description": "Current CleanNow server" }
@@ -40,7 +40,7 @@
     "/auth/login": {
       "post": {
         "tags": ["Authentication"], "summary": "Log in", "operationId": "login",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" }, "example": { "email": "cleaner@cleannow.demo", "password": "demo123" } } } },
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" }, "example": { "email": "admin@cleannow.demo", "password": "demo123" } } } },
         "responses": { "200": { "$ref": "#/components/responses/UserResponse" }, "401": { "$ref": "#/components/responses/ErrorResponse" } }
       }
     },

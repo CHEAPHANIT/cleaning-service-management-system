@@ -672,7 +672,7 @@ class _ServiceGalleryView extends StatelessWidget {
       ),
       const SizedBox(height: 8),
       const Text(
-        'Preview rooms, surfaces, and finishing details from CleanPro service sessions.',
+        'Preview rooms, surfaces, and finishing details from CleanNow service sessions.',
         style: TextStyle(color: AppColors.muted, height: 1.45),
       ),
       const SizedBox(height: 14),

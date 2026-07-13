@@ -1,18 +1,9 @@
 part of '../screens.dart';
 
 class _AppLogoMark extends StatelessWidget {
-  const _AppLogoMark({
-    this.size = 42,
-    this.primary = AppColors.primary,
-    this.secondary = const Color(0xFF32D29B),
-    this.foreground = Colors.white,
-    this.showShadow = false,
-  });
+  const _AppLogoMark({this.size = 42, this.showShadow = false});
 
   final double size;
-  final Color primary;
-  final Color secondary;
-  final Color foreground;
   final bool showShadow;
 
   @override
@@ -24,14 +15,14 @@ class _AppLogoMark extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size * 0.28),
         gradient: LinearGradient(
-          colors: [primary, secondary],
+          colors: const [AppColors.primary, Color(0xFF32D29B)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: showShadow
             ? [
                 BoxShadow(
-                  color: primary.withValues(alpha: 0.28),
+                  color: AppColors.primary.withValues(alpha: 0.28),
                   blurRadius: size * 0.28,
                   offset: Offset(0, size * 0.12),
                 ),
@@ -68,7 +59,7 @@ class _AppLogoMark extends StatelessWidget {
           Center(
             child: Icon(
               Icons.cleaning_services_rounded,
-              color: foreground,
+              color: Colors.white,
               size: iconSize,
             ),
           ),
@@ -79,7 +70,7 @@ class _AppLogoMark extends StatelessWidget {
               width: size * 0.34,
               height: size * 0.34,
               decoration: BoxDecoration(
-                color: foreground,
+                color: Colors.white,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: Colors.white.withValues(alpha: 0.65),
@@ -88,7 +79,7 @@ class _AppLogoMark extends StatelessWidget {
               ),
               child: Icon(
                 Icons.auto_awesome_rounded,
-                color: secondary,
+                color: const Color(0xFF32D29B),
                 size: size * 0.18,
               ),
             ),
@@ -141,7 +132,7 @@ class _MobilePageTopBar extends StatelessWidget {
                   const _AppLogoMark(size: 32),
                   const SizedBox(width: 8),
                   const Text(
-                    'CleanPro',
+                    AppStrings.appName,
                     style: TextStyle(
                       color: AppColors.primaryDark,
                       fontSize: 18,
@@ -1094,6 +1085,8 @@ class _AdminAddCleanerSheetState extends State<_AdminAddCleanerSheet> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
+  final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
   final _address = TextEditingController();
   final _experience = TextEditingController();
   final _imagePicker = ImagePicker();
@@ -1111,7 +1104,15 @@ class _AdminAddCleanerSheetState extends State<_AdminAddCleanerSheet> {
 
   @override
   void dispose() {
-    for (final controller in [_name, _email, _phone, _address, _experience]) {
+    for (final controller in [
+      _name,
+      _email,
+      _phone,
+      _password,
+      _confirmPassword,
+      _address,
+      _experience,
+    ]) {
       controller.dispose();
     }
     super.dispose();
@@ -1181,24 +1182,35 @@ class _AdminAddCleanerSheetState extends State<_AdminAddCleanerSheet> {
       return;
     }
     setState(() => _saving = true);
-    await context.read<AdminDataProvider>().addCleanerFromApplication(
-      CleanerApplicationModel(
-        fullName: _name.text.trim(),
-        email: _email.text.trim(),
-        phone: _phone.text.trim(),
-        gender: _gender!,
-        address: _address.text.trim(),
-        workExperience: '$_experienceLength — ${_experience.text.trim()}',
-        skills: _skills.where(_selectedSkills.contains).join(', '),
-        availableDays: _weekDays.where(_selectedDays.contains).join(', '),
-        availableTime:
-            '${_availableFrom!.format(context)} – ${_availableUntil!.format(context)}',
-        profilePhoto: _profilePhoto!,
-        idDocument: _idDocument!,
-      ),
-    );
-    if (!mounted) return;
-    Navigator.pop(context);
+    try {
+      await context.read<AdminDataProvider>().addCleanerFromApplication(
+        CleanerApplicationModel(
+          fullName: _name.text.trim(),
+          email: _email.text.trim(),
+          phone: _phone.text.trim(),
+          gender: _gender!,
+          address: _address.text.trim(),
+          workExperience: '$_experienceLength — ${_experience.text.trim()}',
+          skills: _skills.where(_selectedSkills.contains).join(', '),
+          availableDays: _weekDays.where(_selectedDays.contains).join(', '),
+          availableTime:
+              '${_availableFrom!.format(context)} – ${_availableUntil!.format(context)}',
+          password: _password.text,
+          profilePhoto: _profilePhoto!,
+          idDocument: _idDocument!,
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('AppException: ', '')),
+        ),
+      );
+    }
   }
 
   @override
@@ -1278,6 +1290,27 @@ class _AdminAddCleanerSheetState extends State<_AdminAddCleanerSheet> {
                   iconColor: AppColors.primaryDark,
                   keyboardType: TextInputType.emailAddress,
                   validator: Validators.email,
+                ),
+                const SizedBox(height: 12),
+                _LoginTextField(
+                  controller: _password,
+                  label: 'Temporary password',
+                  icon: Icons.lock_outline_rounded,
+                  iconColor: AppColors.primaryDark,
+                  validator: Validators.password,
+                  obscureText: true,
+                  canToggleObscure: true,
+                ),
+                const SizedBox(height: 12),
+                _LoginTextField(
+                  controller: _confirmPassword,
+                  label: 'Confirm password',
+                  icon: Icons.verified_user_outlined,
+                  iconColor: AppColors.primaryDark,
+                  validator: (value) =>
+                      Validators.confirmPassword(value, _password.text),
+                  obscureText: true,
+                  canToggleObscure: true,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(

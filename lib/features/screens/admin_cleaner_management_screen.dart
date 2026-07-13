@@ -25,9 +25,7 @@ class _AdminCleanerManagementScreenState
     final sourceCleaners = provider.users
         .where((item) => item.role == 'cleaner')
         .toList();
-    final cleaners = sourceCleaners.isEmpty
-        ? _demoAdminCleaners
-        : sourceCleaners;
+    final cleaners = sourceCleaners;
     final query = searchController.text.trim().toLowerCase();
     final pendingApplications = provider.cleanerApplications.where((item) {
       if (item.status != 'pending') return false;
@@ -179,12 +177,14 @@ class _AdminCleanerManagementScreenState
                   jobs: bookings
                       .where((item) => item.cleanerId == cleaner.id)
                       .toList(),
+                  reviews: provider.cleanerReviews[cleaner.id] ?? const [],
                   onEdit: () => showCleanerDetailSheet(
                     context,
                     cleaner: cleaner,
                     jobs: bookings
                         .where((item) => item.cleanerId == cleaner.id)
                         .toList(),
+                    reviews: provider.cleanerReviews[cleaner.id] ?? const [],
                   ),
                   onAssign: () => _showAssignableBookings(context, cleaner),
                 ),
@@ -259,9 +259,30 @@ class _PendingCleanerApplicationCard extends StatelessWidget {
           children: [
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () => context
-                    .read<AdminDataProvider>()
-                    .approveCleanerApplication(application),
+                onPressed: () async {
+                  try {
+                    await context
+                        .read<AdminDataProvider>()
+                        .approveCleanerApplication(application);
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '${application.fullName} has been approved as a cleaner.',
+                        ),
+                        backgroundColor: const Color(0xFF15966A),
+                      ),
+                    );
+                  } catch (error) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(_cleanerApplicationError(error)),
+                        backgroundColor: const Color(0xFFC43D3D),
+                      ),
+                    );
+                  }
+                },
                 icon: const Icon(Icons.check_rounded, size: 18),
                 label: const Text('Approve'),
               ),
@@ -269,9 +290,29 @@ class _PendingCleanerApplicationCard extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () => context
-                    .read<AdminDataProvider>()
-                    .rejectCleanerApplication(application),
+                onPressed: () async {
+                  try {
+                    await context
+                        .read<AdminDataProvider>()
+                        .rejectCleanerApplication(application);
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '${application.fullName} has been rejected.',
+                        ),
+                      ),
+                    );
+                  } catch (error) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(_cleanerApplicationError(error)),
+                        backgroundColor: const Color(0xFFC43D3D),
+                      ),
+                    );
+                  }
+                },
                 icon: const Icon(Icons.close_rounded, size: 18),
                 label: const Text('Reject'),
               ),
@@ -282,53 +323,6 @@ class _PendingCleanerApplicationCard extends StatelessWidget {
     ),
   );
 }
-
-final _demoAdminCleaners = <UserModel>[
-  const UserModel(
-    id: 101,
-    firebaseUid: 'demo-cleaner-sarah',
-    fullName: 'Sarah Johnson',
-    email: 'sarah.j@email.com',
-    phone: '+1 (555) 987-6543',
-    role: 'cleaner',
-    address: 'Manhattan, Brooklyn',
-    hourlyRate: 12,
-    isActive: true,
-  ),
-  const UserModel(
-    id: 102,
-    firebaseUid: 'demo-cleaner-mike',
-    fullName: 'Mike Chen',
-    email: 'mike.c@email.com',
-    phone: '+1 (555) 876-5432',
-    role: 'cleaner',
-    address: 'Queens, Brooklyn',
-    hourlyRate: 12,
-    isActive: false,
-  ),
-  const UserModel(
-    id: 103,
-    firebaseUid: 'demo-cleaner-emily',
-    fullName: 'Emily Davis',
-    email: 'emily.d@email.com',
-    phone: '+1 (555) 765-4321',
-    role: 'cleaner',
-    address: 'Manhattan',
-    hourlyRate: 11,
-    isActive: true,
-  ),
-  const UserModel(
-    id: 104,
-    firebaseUid: 'demo-cleaner-john',
-    fullName: 'John Smith',
-    email: 'john.s@email.com',
-    phone: '+1 (555) 654-3210',
-    role: 'cleaner',
-    address: 'Bronx, Queens',
-    hourlyRate: 10,
-    isActive: false,
-  ),
-];
 
 class _CleanerSummaryCard extends StatelessWidget {
   const _CleanerSummaryCard({
@@ -374,29 +368,20 @@ class _AdminCleanerCard extends StatelessWidget {
   const _AdminCleanerCard({
     required this.cleaner,
     required this.jobs,
+    required this.reviews,
     required this.onEdit,
     required this.onAssign,
   });
 
   final UserModel cleaner;
   final List<BookingModel> jobs;
+  final List<ReviewModel> reviews;
   final VoidCallback onEdit;
   final VoidCallback onAssign;
 
   @override
   Widget build(BuildContext context) {
-    final completed = jobs.where((item) => item.status == 'Completed').length;
-    final index = _demoAdminCleaners.indexWhere(
-      (item) => item.id == cleaner.id,
-    );
-    final fallbackCompleted = index < 0 ? 95 : [125, 116, 102, 87][index];
-    final earnings = jobs.fold<double>(0, (sum, item) => sum + item.cleanerPay);
-    final fallbackEarnings = index < 0
-        ? cleaner.hourlyRate * 480
-        : [8450.0, 7920.0, 6780.0, 5630.0][index];
-    final rating = index < 0 ? 4.8 : [4.9, 4.8, 4.7, 4.6][index];
-    final displayCompleted = jobs.isEmpty ? fallbackCompleted : completed;
-    final displayEarnings = earnings == 0 ? fallbackEarnings : earnings;
+    final stats = _cleanerDisplayStats(jobs, reviews);
     final status = _cleanerAvailabilityStatus(cleaner, jobs);
     return InteractiveSurface(
       borderRadius: 12,
@@ -422,14 +407,16 @@ class _AdminCleanerCard extends StatelessWidget {
               children: [
                 _CleanerAvailabilityBadge(status),
                 const SizedBox(width: 6),
-                const Icon(
+                Icon(
                   Icons.star_rounded,
-                  color: Color(0xFFFFB000),
+                  color: stats.rating == null
+                      ? const Color(0xFF94A3B8)
+                      : const Color(0xFFFFB000),
                   size: 16,
                 ),
                 const SizedBox(width: 2),
                 Text(
-                  rating.toStringAsFixed(1),
+                  stats.rating?.toStringAsFixed(1) ?? '—',
                   style: const TextStyle(
                     color: Color(0xFF102A43),
                     fontSize: 12,
@@ -441,16 +428,13 @@ class _AdminCleanerCard extends StatelessWidget {
             const SizedBox(height: 12),
             _CleanerInfoRow(icon: Icons.email_outlined, text: cleaner.email),
             const SizedBox(height: 8),
-            const _CleanerInfoRow(
-              icon: Icons.lock_outline,
-              text: 'Temporary password: demo123',
-            ),
-            const SizedBox(height: 8),
             _CleanerInfoRow(icon: Icons.phone_outlined, text: cleaner.phone),
             const SizedBox(height: 8),
             _CleanerInfoRow(
               icon: Icons.location_on_outlined,
-              text: cleaner.address.isEmpty ? 'Phnom Penh' : cleaner.address,
+              text: cleaner.address.isEmpty
+                  ? 'No service area set'
+                  : cleaner.address,
             ),
             const SizedBox(height: 12),
             const Divider(height: 1, color: Color(0xFFE1E9F0)),
@@ -460,21 +444,21 @@ class _AdminCleanerCard extends StatelessWidget {
                 Expanded(
                   child: _CleanerMetric(
                     icon: Icons.calendar_today_outlined,
-                    value: '$displayCompleted',
+                    value: '${stats.completed}',
                     label: 'Completed',
                   ),
                 ),
                 Expanded(
                   child: _CleanerMetric(
                     icon: Icons.check_circle_outline,
-                    value: '98%',
+                    value: '${stats.successRate}%',
                     label: 'Success',
                   ),
                 ),
                 Expanded(
                   child: _CleanerMetric(
                     icon: Icons.attach_money,
-                    value: _adminMoney(displayEarnings),
+                    value: _adminMoney(stats.earnings),
                     label: 'Earnings',
                     valueColor: const Color(0xFF0D83D8),
                   ),
@@ -911,6 +895,7 @@ Future<void> showCleanerDetailSheet(
   BuildContext context, {
   required UserModel cleaner,
   required List<BookingModel> jobs,
+  required List<ReviewModel> reviews,
 }) async {
   final parentContext = context;
   final hasActiveJob = _cleanerHasActiveJob(cleaner, jobs);
@@ -926,7 +911,7 @@ Future<void> showCleanerDetailSheet(
       expand: false,
       builder: (context, scrollController) => StatefulBuilder(
         builder: (context, setSheetState) {
-          final stats = _cleanerDisplayStats(cleaner, jobs);
+          final stats = _cleanerDisplayStats(jobs, reviews);
           Future<void> updateAvailability(String status) async {
             if (hasActiveJob && status != 'Busy') {
               _showAdminToast(
@@ -998,36 +983,35 @@ Future<void> showCleanerDetailSheet(
                           (
                             Icons.location_on_outlined,
                             cleaner.address.isEmpty
-                                ? 'Phnom Penh'
+                                ? 'No service area set'
                                 : cleaner.address,
                           ),
-                          (Icons.calendar_today_outlined, 'Joined March 2025'),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      const _AdminDashboardTitle('Specialties'),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: const [
-                          _SpecialtyChip('Deep Cleaning'),
-                          _SpecialtyChip('Move In/Out'),
-                          _SpecialtyChip('Office'),
+                          (
+                            Icons.calendar_today_outlined,
+                            cleaner.createdAt == null
+                                ? 'Join date unavailable'
+                                : 'Joined ${prettyDate(DateTime.parse(cleaner.createdAt!))}',
+                          ),
                         ],
                       ),
                       const SizedBox(height: 18),
                       const _AdminDashboardTitle('Recent Reviews'),
                       const SizedBox(height: 10),
-                      const _CleanerReviewCard(
-                        name: 'John Doe',
-                        text: 'Exceptional work! Very thorough.',
-                      ),
-                      const SizedBox(height: 8),
-                      const _CleanerReviewCard(
-                        name: 'Alice Brown',
-                        text: 'Sarah is always punctual and professional.',
-                      ),
+                      if (reviews.isEmpty)
+                        const Text(
+                          'No customer reviews yet.',
+                          style: TextStyle(color: AppColors.muted),
+                        )
+                      else
+                        for (final review in reviews.take(3)) ...[
+                          _CleanerReviewCard(
+                            name: _reviewCustomerName(review, jobs),
+                            text: review.comment.isEmpty
+                                ? '${review.rating}-star rating'
+                                : review.comment,
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                       const SizedBox(height: 18),
                       SizedBox(
                         width: double.infinity,
@@ -1080,23 +1064,36 @@ Future<void> _waitForModalRouteToSettle() async {
   await Future<void>.delayed(const Duration(milliseconds: 350));
 }
 
-({int completed, double earnings, double rating, int demoIndex})
-_cleanerDisplayStats(UserModel cleaner, List<BookingModel> jobs) {
+({int completed, double earnings, double? rating, int successRate})
+_cleanerDisplayStats(List<BookingModel> jobs, List<ReviewModel> reviews) {
   final completed = jobs.where((item) => item.status == 'Completed').length;
-  final index = _demoAdminCleaners.indexWhere((item) => item.id == cleaner.id);
-  final fallbackCompleted = index < 0 ? 95 : [125, 116, 102, 87][index];
-  final earnings = jobs.fold<double>(0, (sum, item) => sum + item.cleanerPay);
-  final fallbackEarnings = index < 0
-      ? cleaner.hourlyRate * 480
-      : [8450.0, 7920.0, 6780.0, 5630.0][index];
-  final rating = index < 0 ? 4.8 : [4.9, 4.8, 4.7, 4.6][index];
+  final finished = jobs
+      .where(
+        (item) =>
+            const ['Completed', 'Cancelled', 'Rejected'].contains(item.status),
+      )
+      .length;
+  final earnings = jobs
+      .where((item) => item.status == 'Completed')
+      .fold<double>(0, (sum, item) => sum + item.cleanerPay);
+  final rating = reviews.isEmpty
+      ? null
+      : reviews.fold<int>(0, (sum, review) => sum + review.rating) /
+            reviews.length;
   return (
-    completed: jobs.isEmpty ? fallbackCompleted : completed,
-    earnings: earnings == 0 ? fallbackEarnings : earnings,
+    completed: completed,
+    earnings: earnings,
     rating: rating,
-    demoIndex: index,
+    successRate: finished == 0 ? 0 : (completed / finished * 100).round(),
   );
 }
+
+String _reviewCustomerName(ReviewModel review, List<BookingModel> jobs) =>
+    jobs
+        .where((booking) => booking.id == review.bookingId)
+        .map((booking) => booking.customerName)
+        .firstOrNull ??
+    'Customer';
 
 void _showAvailabilityUpdatedToast(BuildContext context) {
   _showAdminToast(context, 'Availability updated');
@@ -1165,7 +1162,8 @@ class _CleanerDetailHero extends StatelessWidget {
   });
 
   final UserModel cleaner;
-  final ({int completed, double earnings, double rating, int demoIndex}) stats;
+  final ({int completed, double earnings, double? rating, int successRate})
+  stats;
   final VoidCallback onClose;
 
   @override
@@ -1210,14 +1208,18 @@ class _CleanerDetailHero extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.star_rounded,
-                        color: Color(0xFFFFD43B),
+                        color: stats.rating == null
+                            ? Colors.white54
+                            : const Color(0xFFFFD43B),
                         size: 16,
                       ),
                       const SizedBox(width: 3),
                       Text(
-                        '${stats.rating.toStringAsFixed(1)} rating',
+                        stats.rating == null
+                            ? 'No rating yet'
+                            : '${stats.rating!.toStringAsFixed(1)} rating',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -1250,8 +1252,11 @@ class _CleanerDetailHero extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            const Expanded(
-              child: _CleanerDetailStat(value: '98%', label: 'Success'),
+            Expanded(
+              child: _CleanerDetailStat(
+                value: '${stats.successRate}%',
+                label: 'Success',
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1359,29 +1364,6 @@ class _AvailabilityOption extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-      ),
-    ),
-  );
-}
-
-class _SpecialtyChip extends StatelessWidget {
-  const _SpecialtyChip(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: const Color(0xFFEAF6FF),
-      borderRadius: BorderRadius.circular(999),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: Color(0xFF0D6FB8),
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
       ),
     ),
   );
