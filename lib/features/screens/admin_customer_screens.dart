@@ -239,8 +239,16 @@ class AdminCleanerApplicationDetailScreen extends StatelessWidget {
           _ApplicationDetailRow('Skills', application.skills),
           _ApplicationDetailRow('Available days', application.availableDays),
           _ApplicationDetailRow('Available time', application.availableTime),
-          _ApplicationDetailRow('Profile photo', application.profilePhoto),
-          _ApplicationDetailRow('ID document', application.idDocument),
+          _ApplicationDocumentRow(
+            label: 'Profile photo',
+            value: application.profilePhoto,
+            fallbackIcon: Icons.person_outline_rounded,
+          ),
+          _ApplicationDocumentRow(
+            label: 'ID document',
+            value: application.idDocument,
+            fallbackIcon: Icons.badge_outlined,
+          ),
           const SizedBox(height: 12),
           if (application.status == 'pending')
             Row(
@@ -309,6 +317,78 @@ class _ApplicationDetailRow extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _ApplicationDocumentRow extends StatelessWidget {
+  const _ApplicationDocumentRow({
+    required this.label,
+    required this.value,
+    required this.fallbackIcon,
+  });
+
+  final String label;
+  final String value;
+  final IconData fallbackIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    Uint8List? bytes;
+    if (value.startsWith('data:')) {
+      try {
+        bytes = base64Decode(value.split(',').last);
+      } catch (_) {}
+    }
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF6FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: bytes == null
+                  ? Icon(fallbackIcon, color: AppColors.primary, size: 30)
+                  : Image.memory(bytes, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value.isEmpty
+                        ? 'Not provided'
+                        : bytes == null
+                        ? value
+                        : 'Image uploaded',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+            ),
+            if (bytes != null)
+              const Icon(Icons.verified_rounded, color: Colors.green),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CustomerSummaryCard extends StatelessWidget {

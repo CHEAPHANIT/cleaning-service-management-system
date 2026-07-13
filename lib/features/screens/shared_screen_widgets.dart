@@ -1646,7 +1646,7 @@ Future<void> showServiceEditor(
   );
 }
 
-Future<void> showCleanerAssignment(
+Future<bool> showCleanerAssignment(
   BuildContext context,
   BookingModel booking,
 ) async {
@@ -1702,7 +1702,22 @@ Future<void> showCleanerAssignment(
             onTap: () async {
               final navigator = Navigator.of(sheetContext);
               try {
-                await bookingProvider.assignCleaner(booking, cleaner, admin);
+                var assignableBooking = booking;
+                if (assignableBooking.status == 'Pending') {
+                  await bookingProvider.updateStatus(
+                    assignableBooking,
+                    'Accepted',
+                    admin,
+                  );
+                  assignableBooking = bookingProvider.bookings.firstWhere(
+                    (item) => item.id == booking.id,
+                  );
+                }
+                await bookingProvider.assignCleaner(
+                  assignableBooking,
+                  cleaner,
+                  admin,
+                );
                 assignedCleaner = cleaner;
               } catch (error) {
                 assignmentError = error.toString();
@@ -1715,7 +1730,7 @@ Future<void> showCleanerAssignment(
   );
   if (assignmentError != null && context.mounted) {
     _showAdminToast(context, assignmentError!);
-    return;
+    return false;
   }
   if (assignedCleaner != null && context.mounted) {
     _showAdminToast(
@@ -1723,6 +1738,7 @@ Future<void> showCleanerAssignment(
       '${assignedCleaner!.fullName} assigned to ${booking.serviceName}',
     );
   }
+  return assignedCleaner != null;
 }
 
 bool _cleanerIsAvailableForBooking(

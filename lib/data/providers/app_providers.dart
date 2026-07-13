@@ -208,15 +208,29 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await repository.logout();
-    await firebase_auth.FirebaseAuth.instance.signOut();
-    await GoogleSignIn.instance.signOut();
-    await FacebookAuth.instance.logOut();
+    // Clear the app session first. A user must still be logged out even when an
+    // optional social provider is unavailable or its SDK throws during sign-out.
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('current_user_uid');
     await prefs.remove('auth_token');
     user = null;
+    error = null;
     notifyListeners();
+
+    try {
+      await repository.logout();
+    } catch (_) {}
+    try {
+      if (firebase_core.Firebase.apps.isNotEmpty) {
+        await firebase_auth.FirebaseAuth.instance.signOut();
+      }
+    } catch (_) {}
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
+    try {
+      await FacebookAuth.instance.logOut();
+    } catch (_) {}
   }
 
   Future<void> _signInWithSocialUser({

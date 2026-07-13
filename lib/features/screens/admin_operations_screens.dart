@@ -113,9 +113,7 @@ class _RoleBookingManagementScreenState
               .toList()
         : provider.bookings;
     if (role == 'admin') {
-      final sourceBookings = visibleBookings.isEmpty
-          ? _demoAdminManagementBookings
-          : visibleBookings;
+      final sourceBookings = visibleBookings;
       final query = searchController.text.trim().toLowerCase();
       final filteredBookings = sourceBookings.where((booking) {
         final matchesStatus =
@@ -171,11 +169,16 @@ class _RoleBookingManagementScreenState
                     ),
                     const SizedBox(height: 14),
                     if (filteredBookings.isEmpty)
-                      const EmptyStateWidget(
-                        title: 'No matching bookings',
-                        message:
-                            'Try another search term or choose a different status.',
-                        icon: Icons.manage_search_outlined,
+                      EmptyStateWidget(
+                        title: sourceBookings.isEmpty
+                            ? 'No bookings yet'
+                            : 'No matching bookings',
+                        message: sourceBookings.isEmpty
+                            ? 'New customer bookings will appear here for review and cleaner assignment.'
+                            : 'Try another search term or choose a different status.',
+                        icon: sourceBookings.isEmpty
+                            ? Icons.event_note_outlined
+                            : Icons.manage_search_outlined,
                       )
                     else
                       for (final booking in filteredBookings)
@@ -405,7 +408,6 @@ class _AdminManagementBookingCard extends StatelessWidget {
     final cleanerName = booking.cleanerName.isEmpty
         ? 'Not assigned'
         : booking.cleanerName;
-    final canAccept = booking.status == 'Pending';
     final canAssign = booking.status == 'Accepted' && booking.cleanerId == null;
     return InteractiveSurface(
       borderRadius: 12,
@@ -484,42 +486,6 @@ class _AdminManagementBookingCard extends StatelessWidget {
             const SizedBox(height: 12),
             const Divider(height: 1, color: Color(0xFFE8EEF4)),
             const SizedBox(height: 10),
-            if (canAccept) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 38,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _updateAdminBookingStatus(
-                          context,
-                          booking,
-                          'Accepted',
-                        ),
-                        icon: const Icon(Icons.check_rounded, size: 17),
-                        label: const Text('Accept'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SizedBox(
-                      height: 38,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _updateAdminBookingStatus(
-                          context,
-                          booking,
-                          'Rejected',
-                        ),
-                        icon: const Icon(Icons.close_rounded, size: 17),
-                        label: const Text('Reject'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
             Row(
               children: [
                 if (canAssign) ...[
@@ -569,23 +535,6 @@ class _AdminManagementBookingCard extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-Future<void> _updateAdminBookingStatus(
-  BuildContext context,
-  BookingModel booking,
-  String status,
-) async {
-  final admin = context.read<AuthProvider>().user;
-  if (admin == null) return;
-  try {
-    await context.read<BookingProvider>().updateStatus(booking, status, admin);
-    if (context.mounted) {
-      _showAdminToast(context, 'Booking ${status.toLowerCase()}');
-    }
-  } catch (error) {
-    if (context.mounted) _showAdminToast(context, error.toString());
   }
 }
 

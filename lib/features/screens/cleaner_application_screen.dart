@@ -14,34 +14,103 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
   final name = TextEditingController();
   final email = TextEditingController();
   final phone = TextEditingController();
-  final gender = TextEditingController();
   final address = TextEditingController();
   final experience = TextEditingController();
-  final skills = TextEditingController();
-  final days = TextEditingController();
-  final time = TextEditingController();
-  final profilePhoto = TextEditingController();
-  final idDocument = TextEditingController();
+  final imagePicker = ImagePicker();
+  String? selectedGender;
+  String? experienceLength;
+  final selectedSkills = <String>{};
+  final selectedDays = <String>{};
+  TimeOfDay? availableFrom;
+  TimeOfDay? availableUntil;
+  String? profilePhoto;
+  String? idDocument;
+  String? profilePhotoName;
+  String? idDocumentName;
   bool submitted = false;
+
+  static const skillOptions = [
+    'Home Cleaning',
+    'Deep Cleaning',
+    'Office Cleaning',
+    'Bathroom Cleaning',
+    'Kitchen Cleaning',
+    'Carpet Cleaning',
+    'Sofa Cleaning',
+    'Window Cleaning',
+  ];
+  static const weekDays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
 
   @override
   void dispose() {
-    for (final controller in [
-      name,
-      email,
-      phone,
-      gender,
-      address,
-      experience,
-      skills,
-      days,
-      time,
-      profilePhoto,
-      idDocument,
-    ]) {
+    for (final controller in [name, email, phone, address, experience]) {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _pickTime({required bool start}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: start
+          ? (availableFrom ?? const TimeOfDay(hour: 8, minute: 0))
+          : (availableUntil ?? const TimeOfDay(hour: 17, minute: 0)),
+      helpText: start ? 'SELECT START TIME' : 'SELECT END TIME',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (start) {
+        availableFrom = picked;
+      } else {
+        availableUntil = picked;
+      }
+    });
+  }
+
+  Future<void> _pickDocument({required bool profile}) async {
+    final picked = await imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 82,
+      maxWidth: 1600,
+    );
+    if (picked == null || !mounted) return;
+    final bytes = await picked.readAsBytes();
+    final mimeType = picked.mimeType ?? 'image/jpeg';
+    if (!mounted) return;
+    setState(() {
+      final encoded = 'data:$mimeType;base64,${base64Encode(bytes)}';
+      if (profile) {
+        profilePhoto = encoded;
+        profilePhotoName = picked.name;
+      } else {
+        idDocument = encoded;
+        idDocumentName = picked.name;
+      }
+    });
+  }
+
+  String? _selectionError() {
+    if (selectedGender == null) return 'Select your gender.';
+    if (experienceLength == null) return 'Select your experience level.';
+    if (selectedSkills.isEmpty) return 'Select at least one cleaning skill.';
+    if (selectedDays.isEmpty) return 'Select at least one available day.';
+    if (availableFrom == null || availableUntil == null) {
+      return 'Select your available start and end time.';
+    }
+    final start = availableFrom!.hour * 60 + availableFrom!.minute;
+    final end = availableUntil!.hour * 60 + availableUntil!.minute;
+    if (end <= start) return 'End time must be later than start time.';
+    if (profilePhoto == null) return 'Choose a profile picture.';
+    if (idDocument == null) return 'Choose an ID card image.';
+    return null;
   }
 
   @override
@@ -136,12 +205,28 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
                                   keyboardType: TextInputType.emailAddress,
                                 ),
                                 const SizedBox(height: 12),
-                                _LoginTextField(
-                                  controller: gender,
-                                  label: 'Gender',
-                                  icon: Icons.wc_outlined,
-                                  validator: (v) =>
-                                      Validators.required(v, 'Gender'),
+                                DropdownButtonFormField<String>(
+                                  initialValue: selectedGender,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Gender',
+                                    hintText: 'Select male or female',
+                                    prefixIcon: Icon(Icons.wc_rounded),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'Male',
+                                      child: Text('Male'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Female',
+                                      child: Text('Female'),
+                                    ),
+                                  ],
+                                  onChanged: (value) =>
+                                      setState(() => selectedGender = value),
+                                  validator: (value) => value == null
+                                      ? 'Please select your gender'
+                                      : null,
                                 ),
                                 const SizedBox(height: 12),
                                 _LoginTextField(
@@ -153,57 +238,104 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
                                   maxLines: 2,
                                 ),
                                 const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  initialValue: experienceLength,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Cleaning experience',
+                                    hintText: 'Select years of experience',
+                                    prefixIcon: Icon(
+                                      Icons.work_history_outlined,
+                                    ),
+                                  ),
+                                  items:
+                                      const [
+                                            'Less than 1 year',
+                                            '1–2 years',
+                                            '3–5 years',
+                                            'More than 5 years',
+                                          ]
+                                          .map(
+                                            (value) => DropdownMenuItem(
+                                              value: value,
+                                              child: Text(value),
+                                            ),
+                                          )
+                                          .toList(),
+                                  onChanged: (value) =>
+                                      setState(() => experienceLength = value),
+                                  validator: (value) => value == null
+                                      ? 'Please select your experience'
+                                      : null,
+                                ),
+                                const SizedBox(height: 12),
                                 _LoginTextField(
                                   controller: experience,
-                                  label: 'Work experience',
-                                  icon: Icons.work_outline_rounded,
-                                  validator: (v) =>
-                                      Validators.required(v, 'Work experience'),
-                                  maxLines: 3,
+                                  label: 'Describe your work experience',
+                                  icon: Icons.description_outlined,
+                                  validator: (value) {
+                                    final required = Validators.required(
+                                      value,
+                                      'Experience details',
+                                    );
+                                    if (required != null) return required;
+                                    return value!.trim().length < 20
+                                        ? 'Please add at least 20 characters'
+                                        : null;
+                                  },
+                                  maxLines: 4,
                                 ),
                                 const SizedBox(height: 12),
-                                _LoginTextField(
-                                  controller: skills,
-                                  label: 'Skills',
-                                  icon: Icons.auto_awesome_outlined,
-                                  validator: (v) =>
-                                      Validators.required(v, 'Skills'),
+                                _CleanerMultiSelectField(
+                                  label: 'Cleaning skills',
+                                  helper: 'Select all services you can perform',
+                                  icon: Icons.cleaning_services_outlined,
+                                  options: skillOptions,
+                                  selected: selectedSkills,
+                                  onToggle: (value) => setState(() {
+                                    selectedSkills.contains(value)
+                                        ? selectedSkills.remove(value)
+                                        : selectedSkills.add(value);
+                                  }),
                                 ),
                                 const SizedBox(height: 12),
-                                _LoginTextField(
-                                  controller: days,
+                                _CleanerMultiSelectField(
                                   label: 'Available working days',
+                                  helper: 'Choose the days you can really work',
                                   icon: Icons.calendar_month_outlined,
-                                  validator: (v) => Validators.required(
-                                    v,
-                                    'Available working days',
-                                  ),
+                                  options: weekDays,
+                                  selected: selectedDays,
+                                  compactLabels: true,
+                                  onToggle: (value) => setState(() {
+                                    selectedDays.contains(value)
+                                        ? selectedDays.remove(value)
+                                        : selectedDays.add(value);
+                                  }),
                                 ),
                                 const SizedBox(height: 12),
-                                _LoginTextField(
-                                  controller: time,
-                                  label: 'Available working time',
-                                  icon: Icons.schedule_outlined,
-                                  validator: (v) => Validators.required(
-                                    v,
-                                    'Available working time',
-                                  ),
+                                _CleanerTimeRangeField(
+                                  from: availableFrom,
+                                  until: availableUntil,
+                                  onFrom: () => _pickTime(start: true),
+                                  onUntil: () => _pickTime(start: false),
                                 ),
                                 const SizedBox(height: 12),
-                                _LoginTextField(
-                                  controller: profilePhoto,
-                                  label: 'Profile photo URL or file name',
-                                  icon: Icons.photo_camera_outlined,
+                                _CleanerFilePickerField(
+                                  label: 'Profile picture',
+                                  helper: 'Use a clear photo of your face',
+                                  icon: Icons.add_a_photo_outlined,
+                                  value: profilePhoto,
+                                  fileName: profilePhotoName,
+                                  onPick: () => _pickDocument(profile: true),
                                 ),
                                 const SizedBox(height: 12),
-                                _LoginTextField(
-                                  controller: idDocument,
-                                  label: 'ID card/document URL or file name',
+                                _CleanerFilePickerField(
+                                  label: 'ID card or document',
+                                  helper:
+                                      'Upload a clear image for verification',
                                   icon: Icons.badge_outlined,
-                                  validator: (v) => Validators.required(
-                                    v,
-                                    'ID card/document',
-                                  ),
+                                  value: idDocument,
+                                  fileName: idDocumentName,
+                                  onPick: () => _pickDocument(profile: false),
                                 ),
                                 const SizedBox(height: 18),
                                 Consumer<AdminDataProvider>(
@@ -215,21 +347,34 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
                                       if (!form.currentState!.validate()) {
                                         return;
                                       }
+                                      final selectionError = _selectionError();
+                                      if (selectionError != null) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(selectionError),
+                                          ),
+                                        );
+                                        return;
+                                      }
                                       await provider.submitCleanerApplication(
                                         CleanerApplicationModel(
                                           fullName: name.text.trim(),
                                           email: email.text.trim(),
                                           phone: phone.text.trim(),
-                                          gender: gender.text.trim(),
+                                          gender: selectedGender!,
                                           address: address.text.trim(),
-                                          workExperience: experience.text
-                                              .trim(),
-                                          skills: skills.text.trim(),
-                                          availableDays: days.text.trim(),
-                                          availableTime: time.text.trim(),
-                                          profilePhoto: profilePhoto.text
-                                              .trim(),
-                                          idDocument: idDocument.text.trim(),
+                                          workExperience:
+                                              '$experienceLength — ${experience.text.trim()}',
+                                          skills: selectedSkills.join(', '),
+                                          availableDays: weekDays
+                                              .where(selectedDays.contains)
+                                              .join(', '),
+                                          availableTime:
+                                              '${availableFrom!.format(context)} – ${availableUntil!.format(context)}',
+                                          profilePhoto: profilePhoto!,
+                                          idDocument: idDocument!,
                                         ),
                                       );
                                       if (mounted) {
@@ -259,4 +404,307 @@ class _CleanerApplicationScreenState extends State<CleanerApplicationScreen> {
       ),
     ),
   );
+}
+
+class _CleanerMultiSelectField extends StatelessWidget {
+  const _CleanerMultiSelectField({
+    required this.label,
+    required this.helper,
+    required this.icon,
+    required this.options,
+    required this.selected,
+    required this.onToggle,
+    this.compactLabels = false,
+  });
+
+  final String label;
+  final String helper;
+  final IconData icon;
+  final List<String> options;
+  final Set<String> selected;
+  final ValueChanged<String> onToggle;
+  final bool compactLabels;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF8FAFC),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        color: selected.isEmpty ? AppColors.border : AppColors.primary,
+      ),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 20, color: AppColors.primaryDark),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    helper,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (selected.isNotEmpty)
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: AppColors.primary,
+                child: Text(
+                  '${selected.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 11),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: [
+            for (final option in options)
+              FilterChip(
+                label: Text(compactLabels ? option.substring(0, 3) : option),
+                tooltip: option,
+                selected: selected.contains(option),
+                showCheckmark: true,
+                onSelected: (_) => onToggle(option),
+                selectedColor: const Color(0xFFDCEEFF),
+                checkmarkColor: AppColors.primaryDark,
+                side: BorderSide(
+                  color: selected.contains(option)
+                      ? AppColors.primary
+                      : AppColors.border,
+                ),
+              ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _CleanerTimeRangeField extends StatelessWidget {
+  const _CleanerTimeRangeField({
+    required this.from,
+    required this.until,
+    required this.onFrom,
+    required this.onUntil,
+  });
+
+  final TimeOfDay? from;
+  final TimeOfDay? until;
+  final VoidCallback onFrom;
+  final VoidCallback onUntil;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF8FAFC),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(
+              Icons.schedule_rounded,
+              size: 20,
+              color: AppColors.primaryDark,
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Available working time',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Choose the earliest start and latest finish time',
+          style: TextStyle(color: AppColors.muted, fontSize: 11),
+        ),
+        const SizedBox(height: 11),
+        Row(
+          children: [
+            Expanded(
+              child: _CleanerTimeButton(
+                label: 'From',
+                value: from?.format(context) ?? 'Start time',
+                onTap: onFrom,
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.arrow_forward_rounded, size: 17),
+            ),
+            Expanded(
+              child: _CleanerTimeButton(
+                label: 'Until',
+                value: until?.format(context) ?? 'End time',
+                onTap: onUntil,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _CleanerTimeButton extends StatelessWidget {
+  const _CleanerTimeButton({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(10),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: AppColors.muted, fontSize: 10),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _CleanerFilePickerField extends StatelessWidget {
+  const _CleanerFilePickerField({
+    required this.label,
+    required this.helper,
+    required this.icon,
+    required this.value,
+    required this.fileName,
+    required this.onPick,
+  });
+
+  final String label;
+  final String helper;
+  final IconData icon;
+  final String? value;
+  final String? fileName;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    Uint8List? preview;
+    if (value?.startsWith('data:') == true) {
+      try {
+        preview = base64Decode(value!.split(',').last);
+      } catch (_) {}
+    }
+    return InkWell(
+      onTap: onPick,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: value == null
+              ? const Color(0xFFF8FAFC)
+              : const Color(0xFFF0F9FF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: value == null ? AppColors.border : AppColors.primary,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE4F3FF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: preview == null
+                  ? Icon(icon, color: AppColors.primaryDark, size: 25)
+                  : Image.memory(preview, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    fileName ?? helper,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              value == null
+                  ? Icons.upload_file_rounded
+                  : Icons.check_circle_rounded,
+              color: value == null ? AppColors.primary : Colors.green,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

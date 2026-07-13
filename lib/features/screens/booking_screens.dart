@@ -3048,6 +3048,11 @@ class _AdminBookingDetailView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final liveBookings = context.watch<BookingProvider>().bookings;
+    final currentBooking = liveBookings
+        .where((item) => item.id == this.booking.id)
+        .firstOrNull;
+    final booking = currentBooking ?? this.booking;
     final date = DateTime.parse(booking.bookingDate);
     return Scaffold(
       appBar: AppBar(
@@ -3404,13 +3409,42 @@ class _AdminCleanerAssignmentBox extends StatelessWidget {
           color: const Color(0xFFE6F0F8),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Text(
-          'No cleaner assigned',
-          style: TextStyle(
-            color: Color(0xFF5E7388),
-            fontSize: 12,
-            fontStyle: FontStyle.italic,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'No cleaner assigned',
+              style: TextStyle(
+                color: Color(0xFF5E7388),
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            if (booking.status == 'Pending' ||
+                booking.status == 'Accepted') ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => showCleanerAssignment(context, booking),
+                  icon: const Icon(Icons.person_add_alt_1, size: 18),
+                  label: const Text('Choose Available Cleaner'),
+                ),
+              ),
+              if (booking.status == 'Pending') ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        _rejectBookingFromDetails(context, booking),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: const Text('Reject Booking'),
+                  ),
+                ),
+              ],
+            ],
+          ],
         ),
       );
     }
@@ -3448,6 +3482,24 @@ class _AdminCleanerAssignmentBox extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+Future<void> _rejectBookingFromDetails(
+  BuildContext context,
+  BookingModel booking,
+) async {
+  final admin = context.read<AuthProvider>().user;
+  if (admin == null) return;
+  try {
+    await context.read<BookingProvider>().updateStatus(
+      booking,
+      'Rejected',
+      admin,
+    );
+    if (context.mounted) _showAdminToast(context, 'Booking rejected');
+  } catch (error) {
+    if (context.mounted) _showAdminToast(context, error.toString());
   }
 }
 

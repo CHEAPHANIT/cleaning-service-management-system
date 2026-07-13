@@ -509,9 +509,7 @@ Future<void> _showAssignableBookings(
   final liveBookings = bookingProvider.bookings
       .where(_isAvailablePendingBooking)
       .toList();
-  final bookings = liveBookings.isEmpty
-      ? _demoAdminManagementBookings.where(_isAvailablePendingBooking).toList()
-      : liveBookings;
+  final bookings = liveBookings;
 
   final selectedBooking = await showDialog<BookingModel>(
     context: context,
