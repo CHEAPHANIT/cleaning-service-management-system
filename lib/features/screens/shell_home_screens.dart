@@ -1,14 +1,27 @@
 part of '../screens.dart';
 
 class ShellScreen extends StatefulWidget {
-  const ShellScreen({super.key});
+  const ShellScreen({super.key, this.initialIndex = 0});
   static const route = '/app';
+  final int initialIndex;
   @override
   State<ShellScreen> createState() => _ShellScreenState();
 }
 
 class _ShellScreenState extends State<ShellScreen> {
-  int index = 0;
+  late int index;
+
+  @override
+  void initState() {
+    super.initState();
+    index = widget.initialIndex;
+  }
+
+  void selectTab(int value) {
+    if (!mounted || value == index) return;
+    setState(() => index = value);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -125,21 +138,45 @@ class _ShellScreenState extends State<ShellScreen> {
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (value) => setState(() => index = value),
+        onDestinationSelected: selectTab,
         destinations: destinations,
       ),
     );
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final serviceProvider = context.watch<ServiceProvider>();
     final bookings = context.watch<BookingProvider>().bookings;
-    final services = _customerHomeServices(serviceProvider.services);
+    final allServices = _customerHomeServices(serviceProvider.services);
+    final query = searchController.text.trim().toLowerCase();
+    final services = query.isEmpty
+        ? allServices
+        : allServices
+              .where(
+                (option) =>
+                    option.title.toLowerCase().contains(query) ||
+                    option.description.toLowerCase().contains(query),
+              )
+              .toList();
     final nextBooking = _nextCustomerBooking(bookings);
     return Scaffold(
       backgroundColor: Colors.white,
@@ -157,13 +194,21 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 children: [
                   TextField(
-                    readOnly: true,
-                    onTap: () =>
-                        Navigator.pushNamed(context, ServiceListScreen.route),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search_rounded),
+                    controller: searchController,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search_rounded),
                       hintText: 'How can we help you today?',
-                      suffixIcon: Icon(Icons.tune_outlined),
+                      suffixIcon: searchController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              onPressed: () {
+                                searchController.clear();
+                                setState(() {});
+                              },
+                              icon: const Icon(Icons.close_rounded),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -177,6 +222,19 @@ class HomeScreen extends StatelessWidget {
                   _CustomerHomeHero(
                     userName: auth.user?.fullName.split(' ').first ?? 'there',
                     nextBooking: nextBooking,
+                    onTap: () {
+                      if (nextBooking != null) {
+                        Navigator.pushNamed(
+                          context,
+                          BookingDetailScreen.route,
+                          arguments: nextBooking,
+                        );
+                      } else {
+                        context
+                            .findAncestorStateOfType<_ShellScreenState>()
+                            ?.selectTab(1);
+                      }
+                    },
                   ),
                   const SizedBox(height: 20),
                   Row(
@@ -202,29 +260,41 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: services.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 0.86,
-                        ),
-                    itemBuilder: (context, index) {
-                      final option = services[index];
-                      return _CustomerHomeServiceCard(
-                        option: option,
-                        onTap: () => _openCustomerHomeService(context, option),
-                      );
-                    },
-                  ),
+                  if (services.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 28),
+                      child: EmptyStateWidget(
+                        title: 'No services found',
+                        message: 'Try a different service name.',
+                        icon: Icons.search_off_rounded,
+                      ),
+                    )
+                  else
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: services.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 0.86,
+                          ),
+                      itemBuilder: (context, index) {
+                        final option = services[index];
+                        return _CustomerHomeServiceCard(
+                          option: option,
+                          onTap: () =>
+                              _openCustomerHomeService(context, option),
+                        );
+                      },
+                    ),
                   const SizedBox(height: 20),
                   _FirstTimeDiscountCard(
-                    onBook: () =>
-                        Navigator.pushNamed(context, ServiceListScreen.route),
+                    onBook: () => context
+                        .findAncestorStateOfType<_ShellScreenState>()
+                        ?.selectTab(1),
                   ),
                 ],
               ),
@@ -237,10 +307,15 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _CustomerHomeHero extends StatelessWidget {
-  const _CustomerHomeHero({required this.userName, required this.nextBooking});
+  const _CustomerHomeHero({
+    required this.userName,
+    required this.nextBooking,
+    required this.onTap,
+  });
 
   final String userName;
   final BookingModel? nextBooking;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -275,98 +350,102 @@ class _CustomerHomeHero extends StatelessWidget {
             style: TextStyle(color: Colors.white, fontSize: 12),
           ),
           const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Next Booking',
-                        style: TextStyle(
-                          color: Color(0xFFD8EEFF),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+          InteractiveSurface(
+            borderRadius: 12,
+            onTap: onTap,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Next Booking',
+                          style: TextStyle(
+                            color: Color(0xFFD8EEFF),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF63B8F2),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        booking == null ? 'Ready' : 'Confirmed',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF63B8F2),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          booking == null ? 'Ready' : 'Confirmed',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  booking?.serviceName ?? 'Deep Cleaning',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
+                    ],
                   ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on_outlined,
-                      color: Color(0xFFD8EEFF),
-                      size: 15,
+                  const SizedBox(height: 6),
+                  Text(
+                    booking?.serviceName ?? 'Deep Cleaning',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        _customerNextBookingLabel(booking),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        color: Color(0xFFD8EEFF),
+                        size: 15,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          _customerNextBookingLabel(booking),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.star_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 3),
+                      const Text(
+                        '4.9',
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                    ),
-                    const Icon(
-                      Icons.star_rounded,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 3),
-                    const Text(
-                      '4.9',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -590,7 +669,7 @@ class _CustomerServiceOption {
     required this.icon,
     required this.color,
     required this.imageUrl,
-    this.service,
+    required this.service,
   });
 
   final String title;
@@ -600,7 +679,7 @@ class _CustomerServiceOption {
   final IconData icon;
   final Color color;
   final String imageUrl;
-  final ServiceModel? service;
+  final ServiceModel service;
 }
 
 List<_CustomerServiceOption> _customerHomeServices(
@@ -615,7 +694,7 @@ List<_CustomerServiceOption> _customerHomeServices(
     return null;
   }
 
-  _CustomerServiceOption option({
+  _CustomerServiceOption? option({
     required String title,
     required String description,
     required double fallbackPrice,
@@ -626,21 +705,20 @@ List<_CustomerServiceOption> _customerHomeServices(
     required String fallbackImage,
   }) {
     final service = match(query);
+    if (service == null) return null;
     return _CustomerServiceOption(
       title: title,
       description: description,
-      price: service?.basePrice ?? fallbackPrice,
-      duration: service == null
-          ? duration
-          : _customerDurationRange(service.durationMinutes),
+      price: service.basePrice,
+      duration: _customerDurationRange(service.durationMinutes),
       icon: icon,
       color: color,
-      imageUrl: service?.imageUrl ?? fallbackImage,
+      imageUrl: service.imageUrl,
       service: service,
     );
   }
 
-  return [
+  final curated = <_CustomerServiceOption?>[
     option(
       title: 'Home Cleaning',
       description: 'Complete house cleaning service',
@@ -733,7 +811,26 @@ List<_CustomerServiceOption> _customerHomeServices(
       query: 'window',
       fallbackImage: DemoImages.deep,
     ),
-  ];
+  ].whereType<_CustomerServiceOption>().toList();
+
+  final representedIds = curated.map((item) => item.service.id).toSet();
+  for (final service in services.where((item) => item.isActive)) {
+    if (representedIds.add(service.id)) {
+      curated.add(
+        _CustomerServiceOption(
+          title: service.name,
+          description: service.description,
+          price: service.basePrice,
+          duration: _customerDurationRange(service.durationMinutes),
+          icon: serviceCategoryIcon(service.category),
+          color: AppColors.primary,
+          imageUrl: service.imageUrl,
+          service: service,
+        ),
+      );
+    }
+  }
+  return curated;
 }
 
 String _customerDurationRange(int minutes) {
@@ -774,10 +871,9 @@ void _openCustomerHomeService(
   BuildContext context,
   _CustomerServiceOption option,
 ) {
-  final service = option.service;
-  if (service == null) {
-    Navigator.pushNamed(context, ServiceListScreen.route);
-    return;
-  }
-  Navigator.pushNamed(context, ServiceDetailScreen.route, arguments: service);
+  Navigator.pushNamed(
+    context,
+    ServiceDetailScreen.route,
+    arguments: option.service,
+  );
 }

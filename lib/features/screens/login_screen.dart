@@ -301,6 +301,7 @@ class _LoginTextField extends StatelessWidget {
     this.obscureText = false,
     this.canToggleObscure = false,
     this.maxLines = 1,
+    this.iconColor,
   });
 
   final TextEditingController controller;
@@ -311,6 +312,7 @@ class _LoginTextField extends StatelessWidget {
   final bool obscureText;
   final bool canToggleObscure;
   final int maxLines;
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) => _AuthTextFormField(
@@ -322,6 +324,7 @@ class _LoginTextField extends StatelessWidget {
     obscureText: obscureText,
     canToggleObscure: canToggleObscure,
     maxLines: maxLines,
+    iconColor: iconColor,
   );
 }
 
@@ -333,6 +336,7 @@ class _AuthTextFormField extends StatefulWidget {
     required this.obscureText,
     required this.canToggleObscure,
     required this.maxLines,
+    this.iconColor,
     this.validator,
     this.keyboardType,
   });
@@ -345,6 +349,7 @@ class _AuthTextFormField extends StatefulWidget {
   final bool obscureText;
   final bool canToggleObscure;
   final int maxLines;
+  final Color? iconColor;
 
   @override
   State<_AuthTextFormField> createState() => _AuthTextFormFieldState();
@@ -354,44 +359,61 @@ class _AuthTextFormFieldState extends State<_AuthTextFormField> {
   late bool hidden = widget.obscureText;
 
   @override
-  Widget build(BuildContext context) => TextFormField(
-    controller: widget.controller,
-    validator: widget.validator,
-    keyboardType: widget.keyboardType,
-    obscureText: widget.canToggleObscure ? hidden : widget.obscureText,
-    maxLines: widget.obscureText ? 1 : widget.maxLines,
-    decoration: InputDecoration(
-      labelText: widget.label,
-      alignLabelWithHint: widget.maxLines > 1,
-      prefixIcon: Icon(widget.icon, size: 20),
-      suffixIcon: widget.canToggleObscure
-          ? IconButton(
-              tooltip: hidden ? 'Show password' : 'Hide password',
-              onPressed: () => setState(() => hidden = !hidden),
-              icon: Icon(
-                hidden
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                size: 20,
-              ),
-            )
-          : null,
-      filled: true,
-      fillColor: const Color(0xFFF8FAFC),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.border),
+  Widget build(BuildContext context) {
+    final multiline = widget.maxLines > 1 && !widget.obscureText;
+    return TextFormField(
+      controller: widget.controller,
+      validator: widget.validator,
+      keyboardType: widget.keyboardType,
+      obscureText: widget.canToggleObscure ? hidden : widget.obscureText,
+      maxLines: widget.obscureText ? 1 : widget.maxLines,
+      textAlignVertical: multiline ? TextAlignVertical.top : null,
+      decoration: InputDecoration(
+        labelText: widget.label,
+        alignLabelWithHint: multiline,
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 50,
+          minHeight: 48,
+        ),
+        prefixIcon: multiline
+            ? Align(
+                alignment: Alignment.topCenter,
+                widthFactor: 1,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 18),
+                  child: Icon(widget.icon, size: 20, color: widget.iconColor),
+                ),
+              )
+            : Icon(widget.icon, size: 20, color: widget.iconColor),
+        suffixIcon: widget.canToggleObscure
+            ? IconButton(
+                tooltip: hidden ? 'Show password' : 'Hide password',
+                onPressed: () => setState(() => hidden = !hidden),
+                icon: Icon(
+                  hidden
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 20,
+                ),
+              )
+            : null,
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
+        ),
       ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
-      ),
-    ),
-  );
+    );
+  }
 }
 
 class _LoginFooterAction extends StatelessWidget {

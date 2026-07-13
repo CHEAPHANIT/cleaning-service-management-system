@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants.dart';
@@ -16,6 +17,7 @@ import '../core/utils.dart';
 import '../core/widgets.dart';
 import '../data/models/models.dart';
 import '../data/providers/app_providers.dart';
+import '../data/remote/clean_now_api.dart';
 
 part 'screens/splash_screen.dart';
 part 'screens/onboarding_screen.dart';
@@ -46,6 +48,10 @@ final appRoutes = <String, WidgetBuilder>{
   ShellScreen.route: (_) => const AuthGate(child: ShellScreen()),
   CustomerDashboardRoute.route: (_) =>
       const AuthGate(requiredRole: 'customer', child: ShellScreen()),
+  CustomerProfileRoute.route: (_) => const AuthGate(
+    requiredRole: 'customer',
+    child: ShellScreen(initialIndex: 3),
+  ),
   CleanerDashboardRoute.route: (_) =>
       const AuthGate(requiredRole: 'cleaner', child: ShellScreen()),
   CleanerAssignedJobsRoute.route: (_) =>
@@ -81,6 +87,10 @@ String dashboardRouteForRole(String role) => switch (role) {
 
 class CustomerDashboardRoute {
   static const route = '/customer/dashboard';
+}
+
+class CustomerProfileRoute {
+  static const route = '/customer/profile';
 }
 
 class CleanerDashboardRoute {

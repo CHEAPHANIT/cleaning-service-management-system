@@ -573,8 +573,15 @@ class AdminDataProvider extends ChangeNotifier {
       final latestCleaners = latestUsers
           .where((item) => item.role == 'cleaner' && item.isActive)
           .toList();
-      if (jsonEncode(latestUsers.map((item) => item.toJson()).toList()) !=
-          jsonEncode(users.map((item) => item.toJson()).toList())) {
+      final usersChanged =
+          jsonEncode(latestUsers.map((item) => item.toJson()).toList()) !=
+          jsonEncode(users.map((item) => item.toJson()).toList());
+      final applicationsChanged =
+          jsonEncode(
+            latestApplications.map((item) => item.toJson()).toList(),
+          ) !=
+          jsonEncode(cleanerApplications.map((item) => item.toJson()).toList());
+      if (usersChanged || applicationsChanged) {
         users = latestUsers;
         cleaners = latestCleaners;
         cleanerApplications = latestApplications;
@@ -616,6 +623,13 @@ class AdminDataProvider extends ChangeNotifier {
     CleanerApplicationModel application,
   ) async {
     await database.saveCleanerApplication(application);
+    await load();
+  }
+
+  Future<void> addCleanerFromApplication(
+    CleanerApplicationModel application,
+  ) async {
+    await database.addCleanerFromApplication(application);
     await load();
   }
 

@@ -9,6 +9,7 @@ import hmac
 import secrets
 import uuid
 import base64
+import html
 import re
 from urllib.request import urlopen
 from datetime import datetime, timezone
@@ -130,6 +131,11 @@ def initialize():
           admin_note TEXT NOT NULL DEFAULT '', user_id INTEGER,
           created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS demo_payments(
+          id TEXT PRIMARY KEY, user_id INTEGER NOT NULL,
+          amount REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+          created_at TEXT NOT NULL, paid_at TEXT
+        );
         """)
         columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
         if "password_hash" not in columns:
@@ -166,13 +172,20 @@ def initialize():
             )
         services = [
             (1,"Basic Home Cleaning","Home Cleaning","Trusted cleaners refresh your living areas, kitchen, bathroom, floors, and surfaces.",25,120,"https://images.unsplash.com/photo-1581578731548-c64695cc6952",4.5,1,1),
-            (2,"Deep Cleaning","Deep Cleaning","Detailed top-to-bottom cleaning for high-touch surfaces, stains, and hard-to-reach spaces.",50,240,"https://images.unsplash.com/photo-1527515637462-cff31c812dba",4.8,2,1),
+            (2,"Deep Cleaning","Deep Cleaning","Detailed top-to-bottom cleaning for high-touch surfaces, stains, and hard-to-reach spaces.",50,240,"https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?auto=format&fit=crop&w=900&q=80",4.8,2,1),
             (3,"Office Cleaning","Office Cleaning","Workplace cleaning for desks, meeting rooms, shared areas, floors, and restrooms.",40,180,"https://images.unsplash.com/photo-1497366811353-6870744d04b2",4.6,2,1),
             (4,"Move-in Cleaning","Move-in Cleaning","Prepare a new home with cabinet wipe-downs, floor care, bathroom cleaning, and kitchen reset.",60,300,"https://images.unsplash.com/photo-1585421514738-01798e348b17",4.7,2,1),
             (5,"Sofa Cleaning","Sofa Cleaning","Fabric-safe sofa cleaning, surface treatment, vacuuming, and deodorizing.",20,90,"https://images.unsplash.com/photo-1555041469-a586c61ea9bc",4.4,1,1),
             (6,"Carpet Cleaning","Carpet Cleaning","Carpet refresh with vacuuming, stain focus, shampoo, and drying guidance.",30,120,"https://images.unsplash.com/photo-1556228453-efd6c1ff04f6",4.5,1,1),
         ]
         db.executemany("INSERT INTO services VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING", services)
+        db.execute(
+            "UPDATE services SET image_url=? WHERE id=2 AND image_url LIKE ?",
+            (
+                "https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?auto=format&fit=crop&w=900&q=80",
+                "%cff31c812dba%",
+            ),
+        )
 
 
 def hash_password(password, salt=None):
@@ -304,6 +317,36 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
+        demo_match = re.fullmatch(r"/demo-pay/([A-Za-z0-9_-]+)(/success)?", parsed.path)
+        if demo_match:
+            payment_id, success = demo_match.group(1), demo_match.group(2)
+            with connect() as db:
+                payment = db.execute(
+                    "SELECT * FROM demo_payments WHERE id=?", (payment_id,)
+                ).fetchone()
+                if not payment:
+                    return self.reply_bytes(
+                        404,
+                        b"<h1>Demo payment not found</h1>",
+                        "text/html; charset=utf-8",
+                    )
+                if success:
+                    db.execute(
+                        "UPDATE demo_payments SET status='paid',paid_at=? WHERE id=?",
+                        (now(), payment_id),
+                    )
+                    payment = db.execute(
+                        "SELECT * FROM demo_payments WHERE id=?", (payment_id,)
+                    ).fetchone()
+                amount = f"{payment['amount']:.2f}"
+                safe_id = html.escape(payment_id)
+                if payment["status"] == "paid":
+                    page = f"""<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width\"><title>Demo payment successful</title></head>
+                    <body style=\"font-family:Arial;background:#f2fbf7;margin:0;padding:32px;text-align:center\"><main style=\"max-width:420px;margin:auto;background:white;padding:32px;border-radius:18px;border:1px solid #ccebdd\"><div style=\"font-size:64px\">&#10003;</div><h1 style=\"color:#07824f\">Payment successful</h1><p>This is a simulated CleanNow payment.</p><h2>${amount}</h2><p>Reference: {safe_id}</p><p>You may return to the CleanNow app.</p></main></body></html>"""
+                else:
+                    page = f"""<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width\"><title>CleanNow demo payment</title></head>
+                    <body style=\"font-family:Arial;background:#f3f7fb;margin:0;padding:32px;text-align:center\"><main style=\"max-width:420px;margin:auto;background:white;padding:32px;border-radius:18px;border:1px solid #dce6ee\"><div style=\"font-size:56px\">&#128179;</div><h1>Demo payment</h1><p>No real money will be transferred.</p><h2>${amount}</h2><p>Reference: {safe_id}</p><a href=\"/demo-pay/{safe_id}/success\" style=\"display:block;background:#168bdb;color:white;text-decoration:none;padding:15px;border-radius:12px;font-weight:bold\">Confirm demo payment</a></main></body></html>"""
+                return self.reply_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
         if parsed.path in ("/docs", "/docs/", "/swagger", "/swagger/"):
             return self.reply_bytes(200, SWAGGER_UI.encode("utf-8"), "text/html; charset=utf-8")
         if parsed.path == "/openapi.json":
@@ -315,6 +358,16 @@ class Handler(BaseHTTPRequestHandler):
         with connect() as db:
             if parsed.path == "/api/health":
                 return self.reply(200, {"status": "ok", "database": DB_PATH})
+            if parsed.path.startswith("/api/demo-payments/"):
+                user = self.require_user(db, "customer")
+                if user is None:
+                    return
+                payment_id = parsed.path.rsplit("/", 1)[1]
+                row = db.execute(
+                    "SELECT * FROM demo_payments WHERE id=? AND user_id=?",
+                    (payment_id, user["id"]),
+                ).fetchone()
+                return self.reply(200, row_dict(row)) if row else self.reply(404, {"error": "Demo payment not found"})
             if parsed.path == "/api/auth/me":
                 user = self.require_user(db)
                 return None if user is None else self.reply(200, {"user": user_dict(user)})
@@ -430,6 +483,31 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         data = self.body()
         with connect() as db:
+            if parsed.path == "/api/demo-payments":
+                user = self.require_user(db, "customer")
+                if user is None:
+                    return
+                try:
+                    amount = round(float(data.get("amount", 0)), 2)
+                except (TypeError, ValueError):
+                    return self.reply(400, {"error": "Invalid amount"})
+                if amount <= 0 or amount > 100000:
+                    return self.reply(400, {"error": "Invalid amount"})
+                payment_id = secrets.token_urlsafe(18)
+                db.execute(
+                    "INSERT INTO demo_payments(id,user_id,amount,status,created_at) VALUES(?,?,?,'pending',?)",
+                    (payment_id, user["id"], amount, now()),
+                )
+                public_base = str(data.get("public_base_url", "")).strip().rstrip("/")
+                if not re.match(r"^https?://[^/]+(?::\d+)?$", public_base):
+                    host = self.headers.get("Host", f"localhost:{PORT}")
+                    public_base = f"http://{host}"
+                return self.reply(201, {
+                    "id": payment_id,
+                    "amount": amount,
+                    "status": "pending",
+                    "payment_url": f"{public_base}/demo-pay/{payment_id}",
+                })
             if parsed.path in ("/api/auth/register", "/api/auth/register-customer"):
                 email = data.get("email", "").strip().lower()
                 if not valid_email(email):
@@ -532,6 +610,42 @@ class Handler(BaseHTTPRequestHandler):
                 ))
                 notify_admins(db, "Cleaner application", f"{data.get('full_name', 'A cleaner')} applied to join CleanNow.")
                 row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (cursor.lastrowid,)).fetchone()
+                return self.reply(201, row_dict(row))
+            if parsed.path == "/api/admin/cleaners":
+                admin = self.require_user(db, "admin")
+                if admin is None:
+                    return
+                email = data.get("email", "").strip().lower()
+                if not valid_email(email):
+                    return self.reply(400, {"error": "Enter a valid email"})
+                if db.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone():
+                    return self.reply(409, {"error": "Email is already registered"})
+                stamp = now()
+                cursor = db.execute("""
+                  INSERT INTO users(firebase_uid,full_name,email,phone,role,address,hourly_rate,is_active,status,availability_status,created_at,updated_at,password_hash)
+                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    f"cleaner-{uuid.uuid4()}", data.get("full_name", ""), email,
+                    data.get("phone", ""), "cleaner", data.get("address", ""), 10,
+                    1, "active", "Available", stamp, stamp,
+                    hash_password(data.get("password", "Cleaner@123")),
+                ))
+                user_id = cursor.lastrowid
+                application_cursor = db.execute("""
+                  INSERT INTO cleaner_applications(full_name,email,phone,gender,address,work_experience,skills,available_days,available_time,profile_photo,id_document,status,admin_note,user_id,created_at,updated_at)
+                  VALUES(?,?,?,?,?,?,?,?,?,?,?,'approved','Added by admin',?,?,?)
+                """, (
+                    data.get("full_name", ""), email, data.get("phone", ""),
+                    data.get("gender", ""), data.get("address", ""),
+                    data.get("work_experience", ""), data.get("skills", ""),
+                    data.get("available_days", ""), data.get("available_time", ""),
+                    data.get("profile_photo", ""), data.get("id_document", ""),
+                    user_id, stamp, stamp,
+                ))
+                row = db.execute(
+                    "SELECT * FROM cleaner_applications WHERE id=?",
+                    (application_cursor.lastrowid,),
+                ).fetchone()
                 return self.reply(201, row_dict(row))
             if parsed.path.startswith("/api/admin/cleaner-applications/") and parsed.path.endswith("/approve"):
                 admin = self.require_user(db, "admin")

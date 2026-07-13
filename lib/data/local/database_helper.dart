@@ -1009,6 +1009,20 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> addCleanerFromApplication(
+    CleanerApplicationModel application,
+  ) async {
+    if (_apiEnabled) {
+      final remote = await _api.adminCreateCleaner(application);
+      if (remote != null) return;
+    }
+    final id = await saveCleanerApplication(application);
+    final saved = (await cleanerApplications()).where((item) => item.id == id);
+    if (saved.isNotEmpty) {
+      await approveCleanerApplication(saved.first);
+    }
+  }
+
   Future<List<CleanerApplicationModel>> cleanerApplications() async {
     if (_apiEnabled) {
       final remote = await _api.cleanerApplications();

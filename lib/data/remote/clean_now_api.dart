@@ -85,6 +85,21 @@ class CleanNowApi {
     }
   }
 
+  Future<CleanerApplicationModel?> adminCreateCleaner(
+    CleanerApplicationModel application,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/admin/cleaners',
+        data: application.toJson(),
+        options: _authOptions,
+      );
+      return CleanerApplicationModel.fromJson(_map(response.data));
+    } on DioException {
+      return null;
+    }
+  }
+
   Future<List<CleanerApplicationModel>?> cleanerApplications() async {
     try {
       final response = await _dio.get(
@@ -311,6 +326,36 @@ class CleanNowApi {
     try {
       final response = await _dio.get('/products');
       return _list(response.data).map(ProductModel.fromJson).toList();
+    } on DioException {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> createDemoPayment(double amount) async {
+    try {
+      final response = await _dio.post(
+        '/demo-payments',
+        options: _authOptions,
+        data: {
+          'amount': amount,
+          'public_base_url': const String.fromEnvironment(
+            'CLEAN_NOW_PUBLIC_URL',
+          ),
+        },
+      );
+      return _map(response.data);
+    } on DioException {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> demoPayment(String id) async {
+    try {
+      final response = await _dio.get(
+        '/demo-payments/$id',
+        options: _authOptions,
+      );
+      return _map(response.data);
     } on DioException {
       return null;
     }

@@ -17,6 +17,27 @@ class AppStrings {
   static const appName = 'CleanNow';
 }
 
+class PaymentConfig {
+  /// A complete, bank-issued KHQR payload. Keep real merchant payment data out
+  /// of source control and provide it with --dart-define at build/run time.
+  static const khqrPayload = String.fromEnvironment('CLEAN_NOW_KHQR_PAYLOAD');
+  static const merchantName = String.fromEnvironment(
+    'CLEAN_NOW_PAYMENT_MERCHANT',
+    defaultValue: 'CleanNow',
+  );
+  static const apiBaseUrl = String.fromEnvironment(
+    'CLEAN_NOW_API_URL',
+    defaultValue: 'http://localhost:8080/api',
+  );
+  static const demoPublicUrl = String.fromEnvironment('CLEAN_NOW_PUBLIC_URL');
+
+  static bool get khqrConfigured => khqrPayload.trim().isNotEmpty;
+
+  static String get publicServerUrl => demoPublicUrl.trim().isNotEmpty
+      ? demoPublicUrl.trim().replaceAll(RegExp(r'/+$'), '')
+      : apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
+}
+
 class DemoImages {
   static const hero =
       'https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1200&q=80';

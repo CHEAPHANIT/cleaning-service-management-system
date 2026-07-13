@@ -612,7 +612,7 @@ class AdminFinanceScreen extends StatelessWidget {
             child: SizedBox(
               height: 38,
               child: ElevatedButton.icon(
-                onPressed: () => showExportSheet(context, bookings),
+                onPressed: () => _showExportSheet(context, bookings),
                 icon: const Icon(Icons.file_download_outlined, size: 16),
                 label: const Text('Export'),
                 style: ElevatedButton.styleFrom(
@@ -705,11 +705,39 @@ class AdminFinanceScreen extends StatelessWidget {
             mainAxisSpacing: 10,
             crossAxisSpacing: 10,
             childAspectRatio: 1.7,
-            children: const [
-              _ReportShortcutCard(label: 'Daily Report'),
-              _ReportShortcutCard(label: 'Monthly Report'),
-              _ReportShortcutCard(label: 'Income Report'),
-              _ReportShortcutCard(label: 'Performance'),
+            children: [
+              _ReportShortcutCard(
+                label: 'Daily Report',
+                onTap: () => _showExportSheet(
+                  context,
+                  bookings,
+                  initialType: _ReportExportType.daily,
+                ),
+              ),
+              _ReportShortcutCard(
+                label: 'Monthly Report',
+                onTap: () => _showExportSheet(
+                  context,
+                  bookings,
+                  initialType: _ReportExportType.monthly,
+                ),
+              ),
+              _ReportShortcutCard(
+                label: 'Income Report',
+                onTap: () => _showExportSheet(
+                  context,
+                  bookings,
+                  initialType: _ReportExportType.income,
+                ),
+              ),
+              _ReportShortcutCard(
+                label: 'Performance',
+                onTap: () => _showExportSheet(
+                  context,
+                  bookings,
+                  initialType: _ReportExportType.performance,
+                ),
+              ),
             ],
           ),
         ],
@@ -1318,14 +1346,16 @@ class _ServicePopularityCard extends StatelessWidget {
 }
 
 class _ReportShortcutCard extends StatelessWidget {
-  const _ReportShortcutCard({required this.label});
+  const _ReportShortcutCard({required this.label, required this.onTap});
 
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => InteractiveSurface(
     borderRadius: 10,
     lift: 2,
+    onTap: onTap,
     child: Container(
       decoration: BoxDecoration(
         color: Colors.white,

@@ -155,8 +155,17 @@ class _MobilePageTopBar extends StatelessWidget {
                 InkWell(
                   borderRadius: BorderRadius.circular(999),
                   onTap: () {
-                    final current = ModalRoute.of(context)?.settings.name;
-                    if (current != null && current == EditProfileScreen.route) {
+                    if (user?.role == 'customer') {
+                      final shell = context
+                          .findAncestorStateOfType<_ShellScreenState>();
+                      if (shell != null) {
+                        shell.selectTab(3);
+                      } else {
+                        Navigator.pushNamed(
+                          context,
+                          CustomerProfileRoute.route,
+                        );
+                      }
                       return;
                     }
                     Navigator.pushNamed(context, EditProfileScreen.route);
@@ -1045,168 +1054,395 @@ Future<void> showUserEditor(
 }
 
 Future<void> showAddCleanerSheet(BuildContext context) async {
-  final form = GlobalKey<FormState>();
-  final name = TextEditingController();
-  final email = TextEditingController();
-  final phone = TextEditingController();
-  final area = TextEditingController();
-  final specialties = TextEditingController();
-
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (sheetContext) {
-      return Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-          decoration: const BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Form(
-              key: form,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    builder: (_) => const _AdminAddCleanerSheet(),
+  );
+}
+
+class _AdminAddCleanerSheet extends StatefulWidget {
+  const _AdminAddCleanerSheet();
+
+  @override
+  State<_AdminAddCleanerSheet> createState() => _AdminAddCleanerSheetState();
+}
+
+class _AdminAddCleanerSheetState extends State<_AdminAddCleanerSheet> {
+  static const _skills = [
+    'Home Cleaning',
+    'Deep Cleaning',
+    'Office Cleaning',
+    'Bathroom Cleaning',
+    'Kitchen Cleaning',
+    'Carpet Cleaning',
+    'Sofa Cleaning',
+    'Window Cleaning',
+  ];
+  static const _weekDays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+
+  final _form = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _address = TextEditingController();
+  final _experience = TextEditingController();
+  final _imagePicker = ImagePicker();
+  final _selectedSkills = <String>{};
+  final _selectedDays = <String>{};
+  String? _gender;
+  String? _experienceLength;
+  TimeOfDay? _availableFrom;
+  TimeOfDay? _availableUntil;
+  String? _profilePhoto;
+  String? _idDocument;
+  String? _profilePhotoName;
+  String? _idDocumentName;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    for (final controller in [_name, _email, _phone, _address, _experience]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _pickTime({required bool start}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: start
+          ? (_availableFrom ?? const TimeOfDay(hour: 8, minute: 0))
+          : (_availableUntil ?? const TimeOfDay(hour: 17, minute: 0)),
+      helpText: start ? 'SELECT START TIME' : 'SELECT END TIME',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (start) {
+        _availableFrom = picked;
+      } else {
+        _availableUntil = picked;
+      }
+    });
+  }
+
+  Future<void> _pickDocument({required bool profile}) async {
+    final picked = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 82,
+      maxWidth: 1600,
+    );
+    if (picked == null || !mounted) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    final mimeType = picked.mimeType ?? 'image/jpeg';
+    final encoded = 'data:$mimeType;base64,${base64Encode(bytes)}';
+    setState(() {
+      if (profile) {
+        _profilePhoto = encoded;
+        _profilePhotoName = picked.name;
+      } else {
+        _idDocument = encoded;
+        _idDocumentName = picked.name;
+      }
+    });
+  }
+
+  String? _selectionError() {
+    if (_selectedSkills.isEmpty) return 'Select at least one cleaning skill.';
+    if (_selectedDays.isEmpty) return 'Select at least one available day.';
+    if (_availableFrom == null || _availableUntil == null) {
+      return 'Select the available start and end time.';
+    }
+    final start = _availableFrom!.hour * 60 + _availableFrom!.minute;
+    final end = _availableUntil!.hour * 60 + _availableUntil!.minute;
+    if (end <= start) return 'End time must be later than start time.';
+    if (_profilePhoto == null) return 'Choose a profile picture.';
+    if (_idDocument == null) return 'Choose an ID card image.';
+    return null;
+  }
+
+  Future<void> _save() async {
+    if (!_form.currentState!.validate()) return;
+    final selectionError = _selectionError();
+    if (selectionError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(selectionError)));
+      return;
+    }
+    setState(() => _saving = true);
+    await context.read<AdminDataProvider>().addCleanerFromApplication(
+      CleanerApplicationModel(
+        fullName: _name.text.trim(),
+        email: _email.text.trim(),
+        phone: _phone.text.trim(),
+        gender: _gender!,
+        address: _address.text.trim(),
+        workExperience: '$_experienceLength — ${_experience.text.trim()}',
+        skills: _skills.where(_selectedSkills.contains).join(', '),
+        availableDays: _weekDays.where(_selectedDays.contains).join(', '),
+        availableTime:
+            '${_availableFrom!.format(context)} – ${_availableUntil!.format(context)}',
+        profilePhoto: _profilePhoto!,
+        idDocument: _idDocument!,
+      ),
+    );
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Form(
+          key: _form,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
                             'Add New Cleaner',
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 20,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Close',
-                          onPressed: () => Navigator.pop(sheetContext),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _CleanerFormField(
-                      controller: name,
-                      label: 'Full Name',
-                      hint: 'e.g. Jane Smith',
-                      validator: (value) =>
-                          Validators.required(value, 'Full name'),
-                    ),
-                    const SizedBox(height: 12),
-                    _CleanerFormField(
-                      controller: email,
-                      label: 'Email Address',
-                      hint: 'jane@example.com',
-                      keyboardType: TextInputType.emailAddress,
-                      validator: Validators.email,
-                    ),
-                    const SizedBox(height: 12),
-                    _CleanerFormField(
-                      controller: phone,
-                      label: 'Phone Number',
-                      hint: '+1 (555) 000-0000',
-                      keyboardType: TextInputType.phone,
-                      validator: Validators.phone,
-                    ),
-                    const SizedBox(height: 12),
-                    _CleanerFormField(
-                      controller: area,
-                      label: 'Service Area',
-                      hint: 'e.g. Manhattan, Brooklyn',
-                      validator: (value) =>
-                          Validators.required(value, 'Service area'),
-                    ),
-                    const SizedBox(height: 12),
-                    _CleanerFormField(
-                      controller: specialties,
-                      label: 'Specialties (comma-separated)',
-                      hint: 'Home Cleaning, Deep Cleaning',
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 48,
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.pop(sheetContext),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(48),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: const Text('Cancel'),
+                          SizedBox(height: 3),
+                          Text(
+                            'Complete the same details required from applicants.',
+                            style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: SizedBox(
-                            height: 48,
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                if (!form.currentState!.validate()) return;
-                                final model = UserModel(
-                                  firebaseUid:
-                                      'cleaner-${email.text.trim().toLowerCase()}-${DateTime.now().millisecondsSinceEpoch}',
-                                  fullName: name.text.trim(),
-                                  email: email.text.trim(),
-                                  phone: phone.text.trim(),
-                                  role: 'cleaner',
-                                  address: area.text.trim(),
-                                  hourlyRate: 12,
-                                  isActive: true,
-                                );
-                                await context
-                                    .read<AdminDataProvider>()
-                                    .saveUser(model);
-                                if (sheetContext.mounted) {
-                                  Navigator.pop(sheetContext);
-                                }
-                              },
-                              icon: const Icon(
-                                Icons.person_add_alt_1,
-                                size: 16,
-                              ),
-                              label: const Text('Add Cleaner'),
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(48),
-                                backgroundColor: const Color(0xFF168BDB),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: _saving ? null : () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 16),
+                _LoginTextField(
+                  controller: _name,
+                  label: 'Full name',
+                  icon: Icons.person_outline_rounded,
+                  iconColor: AppColors.primaryDark,
+                  validator: (value) => Validators.required(value, 'Full name'),
+                ),
+                const SizedBox(height: 12),
+                _LoginTextField(
+                  controller: _phone,
+                  label: 'Phone number',
+                  icon: Icons.phone_outlined,
+                  iconColor: AppColors.primaryDark,
+                  keyboardType: TextInputType.phone,
+                  validator: Validators.phone,
+                ),
+                const SizedBox(height: 12),
+                _LoginTextField(
+                  controller: _email,
+                  label: 'Email address',
+                  icon: Icons.mail_outline_rounded,
+                  iconColor: AppColors.primaryDark,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: Validators.email,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _gender,
+                  decoration: const InputDecoration(
+                    labelText: 'Gender',
+                    hintText: 'Select male or female',
+                    prefixIcon: Icon(
+                      Icons.wc_rounded,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Male', child: Text('Male')),
+                    DropdownMenuItem(value: 'Female', child: Text('Female')),
+                  ],
+                  onChanged: (value) => setState(() => _gender = value),
+                  validator: (value) =>
+                      value == null ? 'Please select the gender' : null,
+                ),
+                const SizedBox(height: 12),
+                _LoginTextField(
+                  controller: _address,
+                  label: 'Address',
+                  icon: Icons.location_on_outlined,
+                  iconColor: AppColors.primaryDark,
+                  maxLines: 2,
+                  validator: (value) => Validators.required(value, 'Address'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _experienceLength,
+                  decoration: const InputDecoration(
+                    labelText: 'Cleaning experience',
+                    hintText: 'Select years of experience',
+                    prefixIcon: Icon(
+                      Icons.work_history_outlined,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  items:
+                      const [
+                            'Less than 1 year',
+                            '1–2 years',
+                            '3–5 years',
+                            'More than 5 years',
+                          ]
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: (value) =>
+                      setState(() => _experienceLength = value),
+                  validator: (value) =>
+                      value == null ? 'Please select the experience' : null,
+                ),
+                const SizedBox(height: 12),
+                _LoginTextField(
+                  controller: _experience,
+                  label: 'Describe work experience',
+                  icon: Icons.description_outlined,
+                  iconColor: AppColors.primaryDark,
+                  maxLines: 4,
+                  validator: (value) {
+                    final required = Validators.required(
+                      value,
+                      'Experience details',
+                    );
+                    if (required != null) return required;
+                    return value!.trim().length < 20
+                        ? 'Please add at least 20 characters'
+                        : null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                _CleanerMultiSelectField(
+                  label: 'Cleaning skills',
+                  helper: 'Select all services this cleaner can perform',
+                  icon: Icons.cleaning_services_outlined,
+                  options: _skills,
+                  selected: _selectedSkills,
+                  onToggle: (value) => setState(() {
+                    _selectedSkills.contains(value)
+                        ? _selectedSkills.remove(value)
+                        : _selectedSkills.add(value);
+                  }),
+                ),
+                const SizedBox(height: 12),
+                _CleanerMultiSelectField(
+                  label: 'Available working days',
+                  helper: 'Choose the days this cleaner can work',
+                  icon: Icons.calendar_month_outlined,
+                  options: _weekDays,
+                  selected: _selectedDays,
+                  compactLabels: true,
+                  onToggle: (value) => setState(() {
+                    _selectedDays.contains(value)
+                        ? _selectedDays.remove(value)
+                        : _selectedDays.add(value);
+                  }),
+                ),
+                const SizedBox(height: 12),
+                _CleanerTimeRangeField(
+                  from: _availableFrom,
+                  until: _availableUntil,
+                  onFrom: () => _pickTime(start: true),
+                  onUntil: () => _pickTime(start: false),
+                ),
+                const SizedBox(height: 12),
+                _CleanerFilePickerField(
+                  label: 'Profile picture',
+                  helper: 'Use a clear photo of the cleaner’s face',
+                  icon: Icons.add_a_photo_outlined,
+                  value: _profilePhoto,
+                  fileName: _profilePhotoName,
+                  onPick: () => _pickDocument(profile: true),
+                ),
+                const SizedBox(height: 12),
+                _CleanerFilePickerField(
+                  label: 'ID card or document',
+                  helper: 'Upload a clear image for verification',
+                  icon: Icons.badge_outlined,
+                  value: _idDocument,
+                  fileName: _idDocumentName,
+                  onPick: () => _pickDocument(profile: false),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _saving ? null : _save,
+                        icon: _saving
+                            ? const SizedBox.square(
+                                dimension: 17,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.person_add_alt_1, size: 17),
+                        label: Text(_saving ? 'Adding...' : 'Add Cleaner'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
-      );
-    },
+      ),
+    ),
   );
-
-  name.dispose();
-  email.dispose();
-  phone.dispose();
-  area.dispose();
-  specialties.dispose();
 }
 
 Future<void> showEditCleanerSheet(
@@ -1757,8 +1993,12 @@ bool _cleanerIsAvailableForBooking(
   );
 }
 
-void showExportSheet(BuildContext context, List<BookingModel> bookings) {
-  var selectedType = _ReportExportType.daily;
+void _showExportSheet(
+  BuildContext context,
+  List<BookingModel> bookings, {
+  _ReportExportType initialType = _ReportExportType.daily,
+}) {
+  var selectedType = initialType;
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,

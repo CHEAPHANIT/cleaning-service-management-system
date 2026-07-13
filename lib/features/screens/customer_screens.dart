@@ -302,10 +302,50 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     ),
                     title: Text(item.title),
                     subtitle: Text(item.message),
+                    trailing: _isCleanerApplicationNotification(context, item)
+                        ? const Icon(Icons.chevron_right_rounded)
+                        : null,
+                    onTap: _isCleanerApplicationNotification(context, item)
+                        ? () => _openCleanerApplication(context, item)
+                        : null,
                   ),
               ],
             ),
     );
+  }
+
+  bool _isCleanerApplicationNotification(
+    BuildContext context,
+    NotificationModel item,
+  ) =>
+      context.read<AuthProvider>().user?.role == 'admin' &&
+      item.title.toLowerCase() == 'cleaner application';
+
+  Future<void> _openCleanerApplication(
+    BuildContext context,
+    NotificationModel notification,
+  ) async {
+    final provider = context.read<AdminDataProvider>();
+    await provider.load();
+    if (!context.mounted) return;
+
+    CleanerApplicationModel? matchingApplication;
+    for (final application in provider.cleanerApplications) {
+      if (notification.message ==
+          '${application.fullName} applied to join CleanNow.') {
+        matchingApplication = application;
+        break;
+      }
+    }
+    if (matchingApplication != null) {
+      await Navigator.pushNamed(
+        context,
+        AdminCleanerApplicationDetailScreen.route,
+        arguments: matchingApplication,
+      );
+    } else {
+      await Navigator.pushNamed(context, AdminCleanerApplicationsScreen.route);
+    }
   }
 }
 

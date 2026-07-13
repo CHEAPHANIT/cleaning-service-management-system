@@ -257,11 +257,13 @@ class _AdminPageTop extends StatelessWidget {
     required this.user,
     required this.title,
     required this.subtitle,
+    this.showBack = false,
   });
 
   final UserModel? user;
   final String title;
   final String subtitle;
+  final bool showBack;
 
   @override
   Widget build(BuildContext context) {
@@ -295,7 +297,28 @@ class _AdminPageTop extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Divider(height: 1, color: Color(0xFFDDE6EE)),
-        const SizedBox(height: 22),
+        if (showBack) ...[
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              } else {
+                Navigator.pushReplacementNamed(
+                  context,
+                  AdminDashboardRoute.route,
+                );
+              }
+            },
+            icon: const Icon(Icons.arrow_back_rounded, size: 18),
+            label: const Text('Back'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            ),
+          ),
+          const SizedBox(height: 4),
+        ] else
+          const SizedBox(height: 22),
         Text(
           title,
           style: TextStyle(

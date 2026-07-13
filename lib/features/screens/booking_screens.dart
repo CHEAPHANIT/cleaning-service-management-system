@@ -18,6 +18,8 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   int bathrooms = 1;
   DateTime? date;
   TimeOfDay? time;
+  String paymentMethod = 'Cash';
+  bool demoPaymentPaid = false;
   bool initialized = false;
 
   @override
@@ -27,7 +29,10 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
     initialized = true;
     final route = ModalRoute.of(context);
     final arg = route?.settings.arguments;
-    if (arg is ServiceModel) selectedService = arg;
+    if (arg is ServiceModel) {
+      selectedService = arg;
+      _applyServiceDefaults(arg);
+    }
     address.text = context.read<AuthProvider>().user?.address ?? '';
     final services = context.read<ServiceProvider>();
     if (services.services.isEmpty) Future.microtask(services.loadServices);
@@ -51,22 +56,20 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   double get totalPrice {
     final service = selectedService;
     if (service == null) return 0;
-    return PriceCalculator.total(
-      service.basePrice,
-      bedrooms,
-      bathrooms,
-      const [],
+    return _bookingPriceForService(
+      service: service,
+      primaryUnits: bedrooms,
+      secondaryUnits: bathrooms,
     );
   }
 
   int get estimatedDuration {
     final service = selectedService;
     if (service == null) return 0;
-    return PriceCalculator.duration(
-      service.durationMinutes,
-      bedrooms,
-      bathrooms,
-      const [],
+    return _bookingDurationForService(
+      service: service,
+      primaryUnits: bedrooms,
+      secondaryUnits: bathrooms,
     );
   }
 
@@ -77,10 +80,37 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
   void previousStep() => setState(() => step = (step - 1).clamp(0, 2));
 
+  void _applyServiceDefaults(ServiceModel service) {
+    final config = _bookingSpaceConfig(
+      serviceName: service.name,
+      category: service.category,
+    );
+    propertyType = config.defaultProperty;
+    bedrooms = config.defaultPrimaryValue;
+    bathrooms = config.defaultSecondaryValue;
+  }
+
+  void _selectService(ServiceModel service) {
+    setState(() {
+      if (selectedService?.id != service.id) _applyServiceDefaults(service);
+      selectedService = service;
+    });
+  }
+
   Future<void> confirmBooking() async {
     final service = selectedService;
     final user = context.read<AuthProvider>().user;
     if (service == null || user?.id == null || date == null || time == null) {
+      return;
+    }
+    if (paymentMethod == 'KHQR' &&
+        !PaymentConfig.khqrConfigured &&
+        !demoPaymentPaid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Scan and complete the demo payment first.'),
+        ),
+      );
       return;
     }
     final booking = BookingModel(
@@ -97,7 +127,9 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       bookingTime: time!.format(context),
       extraServices: const [],
       specialInstruction: note.text.trim(),
-      paymentMethod: 'Cash',
+      paymentMethod: paymentMethod == 'KHQR' && !PaymentConfig.khqrConfigured
+          ? 'Demo QR (Paid)'
+          : paymentMethod,
       basePrice: service.basePrice,
       extraPrice: totalPrice - service.basePrice,
       totalPrice: totalPrice,
@@ -133,7 +165,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const _CustomerBookingHeader(),
+            _CustomerBookingHeader(inShell: widget.inShell),
             _BookingStepHeader(step: step),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
@@ -145,12 +177,12 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                     services: services,
                     loading: provider.loading,
                     selected: selectedService,
-                    onSelected: (service) =>
-                        setState(() => selectedService = service),
+                    onSelected: _selectService,
                     onContinue: canContinue ? nextStep : null,
                   ),
                   1 => _BookingDetailsStep(
                     key: const ValueKey('details-step'),
+                    service: selectedService!,
                     propertyType: propertyType,
                     bedrooms: bedrooms,
                     bathrooms: bathrooms,
@@ -181,6 +213,13 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                     time: time!,
                     address: address.text.trim(),
                     totalPrice: totalPrice,
+                    paymentMethod: paymentMethod,
+                    onPaymentChanged: (value) => setState(() {
+                      paymentMethod = value;
+                      demoPaymentPaid = false;
+                    }),
+                    onDemoPaymentChanged: (paid) =>
+                        setState(() => demoPaymentPaid = paid),
                     loading: context.watch<BookingProvider>().loading,
                     onBack: previousStep,
                     onConfirm: confirmBooking,
@@ -196,7 +235,26 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 }
 
 class _CustomerBookingHeader extends StatelessWidget {
-  const _CustomerBookingHeader();
+  const _CustomerBookingHeader({required this.inShell});
+
+  final bool inShell;
+
+  void _goBack(BuildContext context) {
+    if (!inShell && Navigator.canPop(context)) {
+      Navigator.pop(context);
+      return;
+    }
+    final shell = context.findAncestorStateOfType<_ShellScreenState>();
+    if (shell != null) {
+      shell.selectTab(0);
+      return;
+    }
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      CustomerDashboardRoute.route,
+      (_) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) => Container(
@@ -204,6 +262,16 @@ class _CustomerBookingHeader extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
     child: Row(
       children: [
+        IconButton.filledTonal(
+          tooltip: inShell ? 'Back to Home' : 'Back',
+          onPressed: () => _goBack(context),
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFFF0F6FC),
+            foregroundColor: const Color(0xFF081C33),
+          ),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        const SizedBox(width: 10),
         Container(
           width: 38,
           height: 38,
@@ -451,9 +519,177 @@ class _BookingServiceRow extends StatelessWidget {
   );
 }
 
+typedef _BookingPropertyOption = ({String label, IconData icon});
+
+class _BookingSpaceConfig {
+  const _BookingSpaceConfig({
+    required this.propertyOptions,
+    required this.defaultProperty,
+    required this.primaryLabel,
+    required this.secondaryLabel,
+    required this.primaryValues,
+    required this.secondaryValues,
+    required this.defaultPrimaryValue,
+    required this.defaultSecondaryValue,
+  });
+
+  final List<_BookingPropertyOption> propertyOptions;
+  final String defaultProperty;
+  final String primaryLabel;
+  final String secondaryLabel;
+  final List<int> primaryValues;
+  final List<int> secondaryValues;
+  final int defaultPrimaryValue;
+  final int defaultSecondaryValue;
+}
+
+_BookingSpaceConfig _bookingSpaceConfig({
+  required String serviceName,
+  String category = '',
+  String? propertyType,
+}) {
+  final service = '$serviceName $category'.toLowerCase();
+  final property = propertyType?.toLowerCase() ?? '';
+  const residentialProperties = <_BookingPropertyOption>[
+    (label: 'House', icon: Icons.home_outlined),
+    (label: 'Condo', icon: Icons.apartment_outlined),
+    (label: 'Apartment', icon: Icons.location_city_outlined),
+  ];
+  const flexibleProperties = <_BookingPropertyOption>[
+    ...residentialProperties,
+    (label: 'Office', icon: Icons.business_center_outlined),
+  ];
+  const commercialProperties = <_BookingPropertyOption>[
+    (label: 'Office', icon: Icons.business_center_outlined),
+    (label: 'Retail Store', icon: Icons.storefront_outlined),
+    (label: 'Commercial', icon: Icons.domain_outlined),
+    (label: 'Co-working', icon: Icons.groups_outlined),
+  ];
+
+  if (service.contains('sofa')) {
+    return const _BookingSpaceConfig(
+      propertyOptions: flexibleProperties,
+      defaultProperty: 'House',
+      primaryLabel: 'Number of Sofas',
+      secondaryLabel: 'Total Seats',
+      primaryValues: [1, 2, 3, 4, 5],
+      secondaryValues: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      defaultPrimaryValue: 1,
+      defaultSecondaryValue: 3,
+    );
+  }
+  if (service.contains('carpet')) {
+    return const _BookingSpaceConfig(
+      propertyOptions: flexibleProperties,
+      defaultProperty: 'House',
+      primaryLabel: 'Carpeted Areas',
+      secondaryLabel: 'Large Rugs',
+      primaryValues: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      secondaryValues: [0, 1, 2, 3, 4, 5],
+      defaultPrimaryValue: 2,
+      defaultSecondaryValue: 0,
+    );
+  }
+  if (service.contains('office') ||
+      const [
+        'office',
+        'retail store',
+        'commercial',
+        'co-working',
+      ].contains(property)) {
+    return const _BookingSpaceConfig(
+      propertyOptions: commercialProperties,
+      defaultProperty: 'Office',
+      primaryLabel: 'Work Areas / Rooms',
+      secondaryLabel: 'Restrooms',
+      primaryValues: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      secondaryValues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      defaultPrimaryValue: 3,
+      defaultSecondaryValue: 1,
+    );
+  }
+  return const _BookingSpaceConfig(
+    propertyOptions: residentialProperties,
+    defaultProperty: 'House',
+    primaryLabel: 'Bedrooms',
+    secondaryLabel: 'Bathrooms',
+    primaryValues: [1, 2, 3, 4, 5],
+    secondaryValues: [1, 2, 3, 4, 5],
+    defaultPrimaryValue: 2,
+    defaultSecondaryValue: 1,
+  );
+}
+
+String _bookingSpaceSummary(BookingModel booking) {
+  final config = _bookingSpaceConfig(
+    serviceName: booking.serviceName,
+    propertyType: booking.propertyType,
+  );
+  return '${booking.propertyType} • ${config.primaryLabel}: ${booking.rooms} • ${config.secondaryLabel}: ${booking.bathrooms}';
+}
+
+double _bookingPriceForService({
+  required ServiceModel service,
+  required int primaryUnits,
+  required int secondaryUnits,
+}) {
+  final type = '${service.name} ${service.category}'.toLowerCase();
+  if (type.contains('sofa')) {
+    return service.basePrice +
+        math.max(0, primaryUnits - 1) * 12 +
+        math.max(0, secondaryUnits - 3) * 3;
+  }
+  if (type.contains('carpet')) {
+    return service.basePrice +
+        math.max(0, primaryUnits - 1) * 10 +
+        secondaryUnits * 5;
+  }
+  if (type.contains('office')) {
+    return service.basePrice +
+        math.max(0, primaryUnits - 1) * 8 +
+        math.max(0, secondaryUnits - 1) * 5;
+  }
+  return PriceCalculator.total(
+    service.basePrice,
+    primaryUnits,
+    secondaryUnits,
+    const [],
+  );
+}
+
+int _bookingDurationForService({
+  required ServiceModel service,
+  required int primaryUnits,
+  required int secondaryUnits,
+}) {
+  final type = '${service.name} ${service.category}'.toLowerCase();
+  if (type.contains('sofa')) {
+    return service.durationMinutes +
+        math.max(0, primaryUnits - 1) * 30 +
+        math.max(0, secondaryUnits - 3) * 10;
+  }
+  if (type.contains('carpet')) {
+    return service.durationMinutes +
+        math.max(0, primaryUnits - 1) * 25 +
+        secondaryUnits * 15;
+  }
+  if (type.contains('office')) {
+    return service.durationMinutes +
+        math.max(0, primaryUnits - 1) * 20 +
+        math.max(0, secondaryUnits - 1) * 15;
+  }
+  return PriceCalculator.duration(
+    service.durationMinutes,
+    primaryUnits,
+    secondaryUnits,
+    const [],
+  );
+}
+
 class _BookingDetailsStep extends StatelessWidget {
   const _BookingDetailsStep({
     super.key,
+    required this.service,
     required this.propertyType,
     required this.bedrooms,
     required this.bathrooms,
@@ -472,6 +708,7 @@ class _BookingDetailsStep extends StatelessWidget {
     required this.onTextChanged,
   });
 
+  final ServiceModel service;
   final String propertyType;
   final int bedrooms;
   final int bathrooms;
@@ -490,94 +727,96 @@ class _BookingDetailsStep extends StatelessWidget {
   final VoidCallback onTextChanged;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'Property Type',
-        style: TextStyle(
-          color: Color(0xFF081C33),
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final config = _bookingSpaceConfig(
+      serviceName: service.name,
+      category: service.category,
+      propertyType: propertyType,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Property Type',
+          style: TextStyle(
+            color: Color(0xFF081C33),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      ),
-      const SizedBox(height: 10),
-      GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 1.78,
-        children: [
-          for (final item in const [
-            ('House', Icons.home_outlined),
-            ('Condo', Icons.apartment_outlined),
-            ('Apartment', Icons.business_outlined),
-            ('Office', Icons.business_center_outlined),
-          ])
-            _PropertyTypeTile(
-              label: item.$1,
-              icon: item.$2,
-              selected: propertyType == item.$1,
-              onTap: () => onPropertyChanged(item.$1),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.78,
+          children: [
+            for (final item in config.propertyOptions)
+              _PropertyTypeTile(
+                label: item.label,
+                icon: item.icon,
+                selected: propertyType == item.label,
+                onTap: () => onPropertyChanged(item.label),
+              ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Expanded(
+              child: _LabeledDropdown<int>(
+                label: config.primaryLabel,
+                value: bedrooms,
+                items: config.primaryValues,
+                itemLabel: (value) => '$value',
+                onChanged: onBedroomsChanged,
+              ),
             ),
-        ],
-      ),
-      const SizedBox(height: 18),
-      Row(
-        children: [
-          Expanded(
-            child: _LabeledDropdown<int>(
-              label: 'Bedrooms',
-              value: bedrooms,
-              items: const [1, 2, 3, 4, 5],
-              itemLabel: (value) => '$value',
-              onChanged: onBedroomsChanged,
+            const SizedBox(width: 12),
+            Expanded(
+              child: _LabeledDropdown<int>(
+                label: config.secondaryLabel,
+                value: bathrooms,
+                items: config.secondaryValues,
+                itemLabel: (value) => '$value',
+                onChanged: onBathroomsChanged,
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _LabeledDropdown<int>(
-              label: 'Bathrooms',
-              value: bathrooms,
-              items: const [1, 2, 3, 4, 5],
-              itemLabel: (value) => '$value',
-              onChanged: onBathroomsChanged,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 18),
-      _BookingDateField(date: date, onChanged: onDateChanged),
-      const SizedBox(height: 18),
-      _BookingTimeField(time: time, onChanged: onTimeChanged),
-      const SizedBox(height: 18),
-      _BookingTextArea(
-        controller: address,
-        icon: Icons.location_on_outlined,
-        label: 'Address',
-        hint: 'Enter your full address',
-        onChanged: onTextChanged,
-      ),
-      const SizedBox(height: 18),
-      _BookingTextArea(
-        controller: note,
-        icon: Icons.chat_bubble_outline,
-        label: 'Special Instructions (Optional)',
-        hint: 'Any special requirements or instructions',
-        onChanged: onTextChanged,
-      ),
-      const SizedBox(height: 22),
-      _BookingStepActions(
-        backLabel: 'Back',
-        nextLabel: 'Continue',
-        nextEnabled: canContinue,
-        onBack: onBack,
-        onNext: onContinue,
-      ),
-    ],
-  );
+          ],
+        ),
+        const SizedBox(height: 18),
+        _BookingDateField(date: date, onChanged: onDateChanged),
+        const SizedBox(height: 18),
+        _BookingTimeField(time: time, onChanged: onTimeChanged),
+        const SizedBox(height: 18),
+        _BookingTextArea(
+          controller: address,
+          icon: Icons.location_on_outlined,
+          label: 'Address',
+          hint: 'Enter your full address',
+          onChanged: onTextChanged,
+        ),
+        const SizedBox(height: 18),
+        _BookingTextArea(
+          controller: note,
+          icon: Icons.chat_bubble_outline,
+          label: 'Special Instructions (Optional)',
+          hint: 'Any special requirements or instructions',
+          onChanged: onTextChanged,
+        ),
+        const SizedBox(height: 22),
+        _BookingStepActions(
+          backLabel: 'Back',
+          nextLabel: 'Continue',
+          nextEnabled: canContinue,
+          onBack: onBack,
+          onNext: onContinue,
+        ),
+      ],
+    );
+  }
 }
 
 class _PropertyTypeTile extends StatelessWidget {
@@ -845,6 +1084,9 @@ class _BookingConfirmStep extends StatelessWidget {
     required this.time,
     required this.address,
     required this.totalPrice,
+    required this.paymentMethod,
+    required this.onPaymentChanged,
+    required this.onDemoPaymentChanged,
     required this.loading,
     required this.onBack,
     required this.onConfirm,
@@ -858,6 +1100,9 @@ class _BookingConfirmStep extends StatelessWidget {
   final TimeOfDay time;
   final String address;
   final double totalPrice;
+  final String paymentMethod;
+  final ValueChanged<String> onPaymentChanged;
+  final ValueChanged<bool> onDemoPaymentChanged;
   final bool loading;
   final VoidCallback onBack;
   final VoidCallback onConfirm;
@@ -888,8 +1133,20 @@ class _BookingConfirmStep extends StatelessWidget {
             _SummaryRow(label: 'Service', value: service.name),
             _SummaryRow(label: 'Property', value: propertyType),
             _SummaryRow(
-              label: 'Rooms',
-              value: '$bedrooms bed, $bathrooms bath',
+              label: _bookingSpaceConfig(
+                serviceName: service.name,
+                category: service.category,
+                propertyType: propertyType,
+              ).primaryLabel,
+              value: '$bedrooms',
+            ),
+            _SummaryRow(
+              label: _bookingSpaceConfig(
+                serviceName: service.name,
+                category: service.category,
+                propertyType: propertyType,
+              ).secondaryLabel,
+              value: '$bathrooms',
             ),
             _SummaryRow(
               label: 'Date & Time',
@@ -935,6 +1192,13 @@ class _BookingConfirmStep extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 20),
+      _BookingPaymentSelector(
+        selected: paymentMethod,
+        totalPrice: totalPrice,
+        onChanged: onPaymentChanged,
+        onDemoPaymentChanged: onDemoPaymentChanged,
+      ),
+      const SizedBox(height: 20),
       _BookingStepActions(
         backLabel: 'Back',
         nextLabel: 'Confirm Booking',
@@ -945,6 +1209,311 @@ class _BookingConfirmStep extends StatelessWidget {
       ),
     ],
   );
+}
+
+class _BookingPaymentSelector extends StatefulWidget {
+  const _BookingPaymentSelector({
+    required this.selected,
+    required this.totalPrice,
+    required this.onChanged,
+    required this.onDemoPaymentChanged,
+  });
+
+  final String selected;
+  final double totalPrice;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<bool> onDemoPaymentChanged;
+
+  @override
+  State<_BookingPaymentSelector> createState() =>
+      _BookingPaymentSelectorState();
+}
+
+class _BookingPaymentSelectorState extends State<_BookingPaymentSelector> {
+  final api = CleanNowApi();
+  Timer? pollTimer;
+  String? sessionId;
+  String? paymentUrl;
+  String status = 'idle';
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.selected == 'KHQR' && !PaymentConfig.khqrConfigured) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _createDemoPayment();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _BookingPaymentSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final enteredDemoQr =
+        widget.selected == 'KHQR' &&
+        !PaymentConfig.khqrConfigured &&
+        oldWidget.selected != 'KHQR';
+    final amountChanged = oldWidget.totalPrice != widget.totalPrice;
+    if (enteredDemoQr ||
+        (widget.selected == 'KHQR' &&
+            !PaymentConfig.khqrConfigured &&
+            amountChanged)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _createDemoPayment();
+      });
+    } else if (widget.selected != 'KHQR') {
+      pollTimer?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _createDemoPayment() async {
+    pollTimer?.cancel();
+    widget.onDemoPaymentChanged(false);
+    setState(() {
+      status = 'creating';
+      sessionId = null;
+      paymentUrl = null;
+      error = null;
+    });
+    final session = await api.createDemoPayment(widget.totalPrice);
+    if (!mounted) return;
+    if (session == null) {
+      setState(() {
+        status = 'error';
+        error =
+            'Could not create a demo payment. Check that the API is running.';
+      });
+      return;
+    }
+    setState(() {
+      sessionId = session['id']?.toString();
+      paymentUrl = session['payment_url']?.toString();
+      status = session['status']?.toString() ?? 'pending';
+    });
+    pollTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _checkDemoPayment(),
+    );
+  }
+
+  Future<void> _checkDemoPayment() async {
+    final id = sessionId;
+    if (id == null || status == 'paid') return;
+    final payment = await api.demoPayment(id);
+    if (!mounted || payment == null) return;
+    final nextStatus = payment['status']?.toString() ?? 'pending';
+    if (nextStatus == status) return;
+    setState(() => status = nextStatus);
+    if (nextStatus == 'paid') {
+      pollTimer?.cancel();
+      widget.onDemoPaymentChanged(true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFDDE6EE)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Payment Method',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 12),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(
+              value: 'Cash',
+              icon: Icon(Icons.payments_outlined),
+              label: Text('Cash'),
+            ),
+            ButtonSegment(
+              value: 'KHQR',
+              icon: Icon(Icons.qr_code_2_rounded),
+              label: Text('Bank QR'),
+            ),
+          ],
+          selected: {widget.selected},
+          onSelectionChanged: (value) => widget.onChanged(value.first),
+        ),
+        if (widget.selected == 'KHQR') ...[
+          const SizedBox(height: 18),
+          if (PaymentConfig.khqrConfigured) ...[
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFDDE6EE)),
+                ),
+                child: QrImageView(
+                  data: PaymentConfig.khqrPayload,
+                  size: 220,
+                  backgroundColor: Colors.white,
+                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                PaymentConfig.merchantName,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: Text(
+                'Amount to pay: ${money(widget.totalPrice)}',
+                style: const TextStyle(
+                  color: AppColors.primaryDark,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Scan with a KHQR-compatible banking app. Payment remains pending until the bank confirms the transaction.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.muted, fontSize: 11),
+            ),
+          ] else ...[
+            _buildDemoPayment(),
+          ],
+        ],
+      ],
+    ),
+  );
+
+  Widget _buildDemoPayment() {
+    if (status == 'creating' || status == 'idle') {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (status == 'error' || paymentUrl == null) {
+      return Column(
+        children: [
+          Text(
+            error ?? 'Demo payment is unavailable.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.danger),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _createDemoPayment,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Try Again'),
+          ),
+        ],
+      );
+    }
+    final paid = status == 'paid';
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF7E6),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            'DEMO PAYMENT — no real money will be transferred',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF8A5700),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: Colors.white,
+          child: QrImageView(
+            data: paymentUrl!,
+            size: 220,
+            backgroundColor: Colors.white,
+            errorCorrectionLevel: QrErrorCorrectLevel.M,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          money(widget.totalPrice),
+          style: const TextStyle(
+            color: AppColors.primaryDark,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          'Reference: ${sessionId ?? '-'}',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.muted, fontSize: 10),
+        ),
+        const SizedBox(height: 12),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          width: double.infinity,
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: paid ? const Color(0xFFE4F8ED) : const Color(0xFFEAF6FF),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                paid ? Icons.check_circle : Icons.hourglass_top_rounded,
+                color: paid ? const Color(0xFF07824F) : AppColors.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                paid
+                    ? 'Demo payment successful — ${money(widget.totalPrice)} paid'
+                    : 'Waiting for QR confirmation…',
+                style: TextStyle(
+                  color: paid ? const Color(0xFF07824F) : AppColors.primaryDark,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!paid) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Scan the QR, open the page, then press “Confirm demo payment”.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.muted, fontSize: 11),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _SummaryRow extends StatelessWidget {
@@ -2088,10 +2657,7 @@ class BookingDetailScreen extends StatelessWidget {
           DetailRow('Customer', booking.customerName),
           DetailRow('Phone', booking.phone),
           DetailRow('Address', booking.address),
-          DetailRow(
-            'Property',
-            '${booking.propertyType}, ${booking.rooms} room(s), ${booking.bathrooms} bathroom(s)',
-          ),
+          DetailRow('Property', _bookingSpaceSummary(booking)),
           DetailRow(
             'Date',
             '${prettyDate(DateTime.parse(booking.bookingDate))} at ${booking.bookingTime}',
@@ -2109,7 +2675,12 @@ class BookingDetailScreen extends StatelessWidget {
                 : booking.specialInstruction,
           ),
           DetailRow('Total', money(booking.totalPrice)),
-          DetailRow('Payment', '${booking.paymentMethod} • Unpaid'),
+          DetailRow(
+            'Payment',
+            booking.paymentMethod.contains('(Paid)')
+                ? booking.paymentMethod
+                : '${booking.paymentMethod} • Unpaid',
+          ),
           const SectionHeader(title: 'Status Timeline'),
           for (final status in [
             'Pending',
@@ -2707,8 +3278,7 @@ class _CleanerJobDetailsCard extends StatelessWidget {
         _CleanerDetailItem(
           icon: Icons.home_outlined,
           label: 'Property Details',
-          value:
-              '${booking.propertyType} • ${booking.rooms} bed, ${booking.bathrooms} bath',
+          value: _bookingSpaceSummary(booking),
         ),
         _CleanerDetailItem(
           icon: Icons.attach_money_rounded,
@@ -3511,10 +4081,7 @@ String _adminDurationLabel(int minutes) {
 }
 
 String _adminPropertyLabel(BookingModel booking) {
-  final service = booking.serviceName.toLowerCase();
-  if (service.contains('carpet')) return 'Living room carpet';
-  if (service.contains('sofa')) return '${booking.rooms}-seat sofa';
-  return '${booking.rooms}-seat ${booking.propertyType.toLowerCase()}';
+  return _bookingSpaceSummary(booking);
 }
 
 String _adminCustomerEmail(String name) {

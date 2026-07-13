@@ -138,6 +138,7 @@ class AdminCleanerApplicationsScreen extends StatelessWidget {
               user: context.watch<AuthProvider>().user,
               title: 'Cleaner Applications',
               subtitle: 'Review cleaner requests and approval status.',
+              showBack: true,
             ),
             const SizedBox(height: 18),
             if (applications.isEmpty)
@@ -230,6 +231,21 @@ class AdminCleanerApplicationDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
         children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: StatusBadge(application.status),
+          ),
+          if (application.status != 'pending') ...[
+            const SizedBox(height: 10),
+            Text(
+              'This application has already been ${application.status}.',
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
           _ApplicationDetailRow('Full name', application.fullName),
           _ApplicationDetailRow('Email', application.email),
           _ApplicationDetailRow('Phone', application.phone),

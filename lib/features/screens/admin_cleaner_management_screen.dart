@@ -29,6 +29,14 @@ class _AdminCleanerManagementScreenState
         ? _demoAdminCleaners
         : sourceCleaners;
     final query = searchController.text.trim().toLowerCase();
+    final pendingApplications = provider.cleanerApplications.where((item) {
+      if (item.status != 'pending') return false;
+      return query.isEmpty ||
+          item.fullName.toLowerCase().contains(query) ||
+          item.email.toLowerCase().contains(query) ||
+          item.phone.toLowerCase().contains(query) ||
+          item.address.toLowerCase().contains(query);
+    }).toList();
     final filteredCleaners = cleaners.where((cleaner) {
       return query.isEmpty ||
           cleaner.fullName.toLowerCase().contains(query) ||
@@ -131,6 +139,33 @@ class _AdminCleanerManagementScreenState
               ],
             ),
             const SizedBox(height: 18),
+            if (pendingApplications.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Pending applications',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  StatusBadge('${pendingApplications.length} pending'),
+                ],
+              ),
+              const SizedBox(height: 10),
+              for (final application in pendingApplications) ...[
+                _PendingCleanerApplicationCard(application: application),
+                const SizedBox(height: 12),
+              ],
+              const SizedBox(height: 6),
+              const Text(
+                'Cleaning staff',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 10),
+            ],
             if (filteredCleaners.isEmpty)
               const EmptyStateWidget(
                 title: 'No matching cleaners',
@@ -158,6 +193,94 @@ class _AdminCleanerManagementScreenState
       ),
     );
   }
+}
+
+class _PendingCleanerApplicationCard extends StatelessWidget {
+  const _PendingCleanerApplicationCard({required this.application});
+
+  final CleanerApplicationModel application;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF8FBFE),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => Navigator.pushNamed(
+            context,
+            AdminCleanerApplicationDetailScreen.route,
+            arguments: application,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: AppColors.primary,
+                  child: Icon(
+                    Icons.cleaning_services_outlined,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        application.fullName,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${application.email} • ${application.phone}',
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => context
+                    .read<AdminDataProvider>()
+                    .approveCleanerApplication(application),
+                icon: const Icon(Icons.check_rounded, size: 18),
+                label: const Text('Approve'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => context
+                    .read<AdminDataProvider>()
+                    .rejectCleanerApplication(application),
+                icon: const Icon(Icons.close_rounded, size: 18),
+                label: const Text('Reject'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }
 
 final _demoAdminCleaners = <UserModel>[
