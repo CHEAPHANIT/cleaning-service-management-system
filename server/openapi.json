@@ -131,6 +131,7 @@
     "/notifications": {
       "get": {
         "tags": ["Notifications"], "summary": "List a user's notifications", "operationId": "listNotifications",
+        "security": [{ "bearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/RequiredUserIdQuery" }],
         "responses": { "200": { "description": "Notifications newest first", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Notification" } } } } } }
       }
@@ -138,6 +139,7 @@
     "/notifications/read-all": {
       "patch": {
         "tags": ["Notifications"], "summary": "Mark all notifications as read", "operationId": "readAllNotifications",
+        "security": [{ "bearerAuth": [] }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserIdBody" } } } },
         "responses": { "200": { "description": "Updated", "content": { "application/json": { "schema": { "type": "object", "properties": { "updated": { "type": "boolean" } } } } } } }
       }
@@ -145,6 +147,7 @@
     "/favorites": {
       "get": {
         "tags": ["Favorites"], "summary": "List a user's favorite services", "operationId": "listFavorites",
+        "security": [{ "bearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/RequiredUserIdQuery" }],
         "responses": { "200": { "description": "Favorites", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Favorite" } } } } } }
       }
@@ -152,6 +155,7 @@
     "/favorites/toggle": {
       "post": {
         "tags": ["Favorites"], "summary": "Add or remove a favorite", "operationId": "toggleFavorite",
+        "security": [{ "bearerAuth": [] }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FavoriteInput" } } } },
         "responses": { "200": { "description": "Resulting favorite state", "content": { "application/json": { "schema": { "type": "object", "properties": { "favorite": { "type": "boolean" } } } } } } }
       }
@@ -159,6 +163,7 @@
     "/addresses": {
       "get": {
         "tags": ["Addresses"], "summary": "List a user's addresses", "operationId": "listAddresses",
+        "security": [{ "bearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/RequiredUserIdQuery" }],
         "responses": { "200": { "description": "Default address first", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Address" } } } } } }
       }
@@ -166,6 +171,7 @@
     "/addresses/replace": {
       "post": {
         "tags": ["Addresses"], "summary": "Replace all addresses for a user", "operationId": "replaceAddresses",
+        "security": [{ "bearerAuth": [] }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["user_id", "addresses"], "properties": { "user_id": { "type": "integer" }, "addresses": { "type": "array", "items": { "$ref": "#/components/schemas/AddressInput" } } } } } } },
         "responses": { "200": { "description": "Saved addresses", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Address" } } } } } }
       }
@@ -173,6 +179,7 @@
     "/reviews": {
       "post": {
         "tags": ["Reviews"], "summary": "Create or update a booking review", "operationId": "upsertReview",
+        "security": [{ "bearerAuth": [] }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReviewInput" } } } },
         "responses": { "200": { "description": "Saved review", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Review" } } } } }
       }
@@ -180,6 +187,7 @@
     "/reviews/booking/{bookingId}": {
       "get": {
         "tags": ["Reviews"], "summary": "Get the review for a booking", "operationId": "getBookingReview",
+        "security": [{ "bearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
         "responses": { "200": { "description": "Review", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Review" } } } }, "404": { "$ref": "#/components/responses/ErrorResponse" } }
       }
@@ -192,6 +200,13 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "CleanNow token"
+      }
+    },
     "parameters": {
       "UserId": { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } },
       "ServiceId": { "name": "serviceId", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } },

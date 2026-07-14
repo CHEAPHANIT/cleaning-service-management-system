@@ -434,6 +434,20 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return user
 
+    def require_own_user_id(self, db, raw_user_id, *roles):
+        user = self.require_user(db, *roles)
+        if user is None:
+            return None
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            self.reply(400, {"error": "Invalid user id"})
+            return None
+        if user["id"] != user_id:
+            self.reply(403, {"error": "Forbidden"})
+            return None
+        return user, user_id
+
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors()
@@ -563,28 +577,63 @@ class Handler(BaseHTTPRequestHandler):
                 rows = db.execute(sql + " ORDER BY created_at DESC", args).fetchall()
                 return self.reply(200, [row_dict(row) for row in rows])
             if parsed.path == "/api/notifications" and "user_id" in query:
+                ownership = self.require_own_user_id(db, query["user_id"][0])
+                if ownership is None:
+                    return
+                _, user_id = ownership
                 rows = db.execute(
                     "SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC",
-                    (query["user_id"][0],),
+                    (user_id,),
                 ).fetchall()
                 return self.reply(200, [row_dict(row) for row in rows])
             if parsed.path == "/api/favorites" and "user_id" in query:
+                ownership = self.require_own_user_id(
+                    db, query["user_id"][0], "customer"
+                )
+                if ownership is None:
+                    return
+                _, user_id = ownership
                 rows = db.execute(
                     "SELECT * FROM favorites WHERE user_id=? ORDER BY created_at DESC",
-                    (query["user_id"][0],),
+                    (user_id,),
                 ).fetchall()
                 return self.reply(200, [row_dict(row) for row in rows])
             if parsed.path == "/api/addresses" and "user_id" in query:
+                ownership = self.require_own_user_id(
+                    db, query["user_id"][0], "customer"
+                )
+                if ownership is None:
+                    return
+                _, user_id = ownership
                 rows = db.execute(
                     "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC,id",
-                    (query["user_id"][0],),
+                    (user_id,),
                 ).fetchall()
                 return self.reply(200, [row_dict(row) for row in rows])
             if parsed.path.startswith("/api/reviews/booking/"):
+                user = self.require_user(db)
+                if user is None:
+                    return
                 try:
                     booking_id = int(parsed.path.rsplit("/", 1)[1])
                 except ValueError:
                     return self.reply(400, {"error": "Invalid booking id"})
+                booking = db.execute(
+                    "SELECT user_id,cleaner_id FROM bookings WHERE id=?",
+                    (booking_id,),
+                ).fetchone()
+                if not booking:
+                    return self.reply(404, {"error": "Booking not found"})
+                may_view = (
+                    user["role"] == "admin"
+                    or booking["user_id"] == user["id"]
+                    or (
+                        user["role"] == "cleaner"
+                        and booking["cleaner_id"] == user["id"]
+                    )
+                )
+                if not may_view:
+                    return self.reply(403, {"error": "Forbidden"})
                 row = db.execute("SELECT * FROM reviews WHERE booking_id=?", (booking_id,)).fetchone()
                 return self.reply(200, row_dict(row)) if row else self.reply(404, {"error": "Review not found"})
             if parsed.path == "/api/reviews" and "cleaner_id" in query:
@@ -921,14 +970,25 @@ class Handler(BaseHTTPRequestHandler):
                 """, (service_id,data["name"],data["category"],data["description"],data["base_price"],data["duration_minutes"],data["image_url"],data.get("rating",0),data.get("cleaners_required",1),data.get("is_active",1)))
                 return self.reply(200, row_dict(db.execute("SELECT * FROM services WHERE id=?", (service_id,)).fetchone()))
             if parsed.path == "/api/favorites/toggle":
-                existing = db.execute("SELECT id FROM favorites WHERE user_id=? AND service_id=?", (data["user_id"],data["service_id"])).fetchone()
+                ownership = self.require_own_user_id(
+                    db, data.get("user_id"), "customer"
+                )
+                if ownership is None:
+                    return
+                _, user_id = ownership
+                existing = db.execute("SELECT id FROM favorites WHERE user_id=? AND service_id=?", (user_id,data["service_id"])).fetchone()
                 if existing:
                     db.execute("DELETE FROM favorites WHERE id=?", (existing["id"],))
                     return self.reply(200, {"favorite": False})
-                db.execute("""INSERT INTO favorites(user_id,service_id,service_name,service_image,service_price,created_at) VALUES(?,?,?,?,?,?)""", (data["user_id"],data["service_id"],data["service_name"],data["service_image"],data["service_price"],now()))
+                db.execute("""INSERT INTO favorites(user_id,service_id,service_name,service_image,service_price,created_at) VALUES(?,?,?,?,?,?)""", (user_id,data["service_id"],data["service_name"],data["service_image"],data["service_price"],now()))
                 return self.reply(200, {"favorite": True})
             if parsed.path == "/api/addresses/replace":
-                user_id = data["user_id"]
+                ownership = self.require_own_user_id(
+                    db, data.get("user_id"), "customer"
+                )
+                if ownership is None:
+                    return
+                _, user_id = ownership
                 db.execute("DELETE FROM addresses WHERE user_id=?", (user_id,))
                 for item in data.get("addresses", []):
                     db.execute(
@@ -938,12 +998,38 @@ class Handler(BaseHTTPRequestHandler):
                 rows = db.execute("SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC,id", (user_id,)).fetchall()
                 return self.reply(200, [row_dict(row) for row in rows])
             if parsed.path == "/api/reviews":
+                ownership = self.require_own_user_id(
+                    db, data.get("user_id"), "customer"
+                )
+                if ownership is None:
+                    return
+                user, user_id = ownership
+                try:
+                    booking_id = int(data.get("booking_id"))
+                    service_id = int(data.get("service_id"))
+                    rating = int(data.get("rating"))
+                except (TypeError, ValueError):
+                    return self.reply(400, {"error": "Invalid review data"})
+                if rating < 1 or rating > 5:
+                    return self.reply(400, {"error": "Rating must be between 1 and 5"})
+                booking = db.execute(
+                    "SELECT user_id,service_id,status FROM bookings WHERE id=?",
+                    (booking_id,),
+                ).fetchone()
+                if not booking:
+                    return self.reply(404, {"error": "Booking not found"})
+                if booking["user_id"] != user["id"]:
+                    return self.reply(403, {"error": "Cannot review another customer's booking"})
+                if booking["service_id"] != service_id:
+                    return self.reply(400, {"error": "Review service does not match booking"})
+                if booking["status"] != "Completed":
+                    return self.reply(409, {"error": "Only completed bookings can be reviewed"})
                 cursor = db.execute("""
                   INSERT INTO reviews(booking_id,service_id,user_id,rating,comment,created_at)
                   VALUES(?,?,?,?,?,?) ON CONFLICT(booking_id) DO UPDATE SET
                   rating=excluded.rating,comment=excluded.comment
-                """, (data["booking_id"],data["service_id"],data["user_id"],data["rating"],data.get("comment",""),now()))
-                row = db.execute("SELECT * FROM reviews WHERE booking_id=?", (data["booking_id"],)).fetchone()
+                """, (booking_id,service_id,user_id,rating,data.get("comment",""),now()))
+                row = db.execute("SELECT * FROM reviews WHERE booking_id=?", (booking_id,)).fetchone()
                 return self.reply(200, row_dict(row))
             if parsed.path == "/api/bookings":
                 user = self.require_user(db, "customer")
@@ -959,9 +1045,21 @@ class Handler(BaseHTTPRequestHandler):
                     "estimated_duration","cleaner_id","cleaner_name","cleaner_pay","status","service_image",
                     "before_photos","after_photos","completion_notes","created_at","updated_at"
                 ]
+                booking_defaults = {
+                    "extra_services": [],
+                    "special_instruction": "",
+                    "cleaner_id": None,
+                    "cleaner_name": "",
+                    "cleaner_pay": 0,
+                    "status": "Pending",
+                    "service_image": "",
+                    "before_photos": [],
+                    "after_photos": [],
+                    "completion_notes": "",
+                }
                 values = []
                 for column in columns[:-2]:
-                    value = data.get(column)
+                    value = data.get(column, booking_defaults.get(column))
                     if column in ("extra_services", "before_photos", "after_photos") and not isinstance(value, str):
                         value = json.dumps(value or [])
                     values.append(value)
@@ -982,9 +1080,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/notifications/read-all":
             data = self.body()
             with connect() as db:
+                ownership = self.require_own_user_id(db, data.get("user_id"))
+                if ownership is None:
+                    return
+                _, user_id = ownership
                 db.execute(
                     "UPDATE notifications SET is_read=1 WHERE user_id=?",
-                    (data["user_id"],),
+                    (user_id,),
                 )
             return self.reply(200, {"updated": True})
         parts = path.strip("/").split("/")

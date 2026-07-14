@@ -31,6 +31,8 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Supplies the Cupertino icon font used by Flutter/plugin UI on web builds.
+  cupertino_icons: ^1.0.8
   provider: ^6.1.5+1
   sqflite: ^2.4.3
   path: ^1.9.1

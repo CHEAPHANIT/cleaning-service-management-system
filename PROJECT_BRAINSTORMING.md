@@ -213,7 +213,7 @@ The current prototype includes:
 ### Intentionally outside the current production scope
 
 - Real-money payment processing and payment verification
-- Production-grade access tokens and server-side authorization for every protected operation
+- Externally managed production identity and an independently reviewed authorization model
 - Government identity or background-check integrations
 - Real-time GPS tracking
 - Automated SMS, email, and push-notification delivery
@@ -315,7 +315,7 @@ The recommended starting model is a clear commission or service margin because i
 
 | Risk | Possible impact | Mitigation idea |
 | --- | --- | --- |
-| Weak authorization | Users could access or change unauthorized data | Add access tokens and enforce role and ownership checks in the API |
+| Authorization defects | Users could access or change unauthorized data | Maintain bearer-token, role, and ownership checks with integration tests and security review |
 | Unverified cleaners | Customer safety and trust concerns | Add identity review, references, background checks, and approval records |
 | Schedule conflicts | Late or missed services | Add server-side availability checks, travel buffers, and calendar conflict detection |
 | Payment fraud or failure | Lost revenue and disputes | Integrate a verified payment provider with server-side confirmation |
@@ -337,11 +337,11 @@ The recommended starting model is a clear commission or service margin because i
 
 ### Phase 2: Security and deployment readiness — next priority
 
-- Issue secure authentication tokens
-- Enforce server-side roles and record ownership
+- Harden the existing signed authentication tokens and session lifecycle
+- Expand server-side role and record-ownership coverage
 - Validate all API inputs consistently
 - Protect cleaner documents and uploaded photos
-- Add backend automated tests, logging, and monitoring
+- Expand backend automated tests, logging, and monitoring
 - Confirm Turso and Vercel behavior under realistic requests
 
 ### Phase 3: Real business operation

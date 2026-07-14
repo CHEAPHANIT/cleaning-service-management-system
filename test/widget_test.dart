@@ -20,6 +20,92 @@ void main() {
     expect(total, 51);
   });
 
+  testWidgets('customer can select optional services while booking', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final database = DatabaseHelper();
+    final auth = AuthProvider(AuthRepository(false), database)
+      ..initialized = true
+      ..user = const UserModel(
+        id: 10,
+        firebaseUid: 'extras-customer',
+        fullName: 'Extras Customer',
+        email: 'extras@example.com',
+        phone: '+855 12 345 678',
+      );
+    final services = ServiceProvider(ServiceRepository(database))
+      ..services = const [
+        ServiceModel(
+          id: 1,
+          name: 'Basic Home Cleaning',
+          category: 'Home Cleaning',
+          description: 'Home cleaning test service',
+          basePrice: 25,
+          durationMinutes: 120,
+          imageUrl: '',
+          rating: 4.5,
+          cleanersRequired: 1,
+        ),
+      ];
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider<ServiceProvider>.value(value: services),
+          ChangeNotifierProvider(create: (_) => BookingProvider(database)),
+        ],
+        child: const MaterialApp(home: BookingFormScreen()),
+      ),
+    );
+
+    await tester.tap(find.text('Basic Home Cleaning'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    final extra = find.byKey(
+      const ValueKey('booking-extra-Inside fridge cleaning'),
+    );
+    await tester.ensureVisible(extra);
+    expect(tester.widget<CheckboxListTile>(extra).value, isFalse);
+
+    await tester.tap(extra);
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<CheckboxListTile>(extra).value, isTrue);
+    expect(find.text(r'+$5'), findsOneWidget);
+  });
+
+  testWidgets('protected booking route redirects signed-out users', (
+    tester,
+  ) async {
+    final database = DatabaseHelper();
+    final auth = AuthProvider(AuthRepository(false), database)
+      ..initialized = true;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthProvider>.value(
+        value: auth,
+        child: MaterialApp(
+          routes: {
+            BookingFormScreen.route: appRoutes[BookingFormScreen.route]!,
+            LoginScreen.route: (_) => const Scaffold(
+              body: Center(child: Text('Sign in destination')),
+            ),
+          },
+          initialRoute: BookingFormScreen.route,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in destination'), findsOneWidget);
+    expect(find.text('New Booking'), findsNothing);
+  });
+
   test('email validator rejects invalid email', () {
     expect(Validators.email('not-an-email'), isNotNull);
     expect(Validators.email('customer@example.com'), isNull);

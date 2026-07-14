@@ -65,17 +65,26 @@ final appRoutes = <String, WidgetBuilder>{
     requiredRole: 'admin',
     child: AdminCleanerApplicationDetailScreen(),
   ),
-  ServiceListScreen.route: (_) => const ServiceListScreen(),
-  ServiceDetailScreen.route: (_) => const ServiceDetailScreen(),
-  BookingFormScreen.route: (_) => const BookingFormScreen(),
-  BookingSuccessScreen.route: (_) => const BookingSuccessScreen(),
-  BookingDetailScreen.route: (_) => const BookingDetailScreen(),
-  ProductListScreen.route: (_) => const ProductListScreen(),
-  ProductDetailScreen.route: (_) => const ProductDetailScreen(),
-  NotificationScreen.route: (_) => const NotificationScreen(),
-  EditProfileScreen.route: (_) => const EditProfileScreen(),
-  ReviewScreen.route: (_) => const ReviewScreen(),
-  TipsScreen.route: (_) => const TipsScreen(),
+  ServiceListScreen.route: (_) =>
+      const AuthGate(requiredRole: 'customer', child: ServiceListScreen()),
+  ServiceDetailScreen.route: (_) =>
+      const AuthGate(requiredRole: 'customer', child: ServiceDetailScreen()),
+  BookingFormScreen.route: (_) =>
+      const AuthGate(requiredRole: 'customer', child: BookingFormScreen()),
+  BookingSuccessScreen.route: (_) =>
+      const AuthGate(requiredRole: 'customer', child: BookingSuccessScreen()),
+  BookingDetailScreen.route: (_) =>
+      const AuthGate(child: BookingDetailScreen()),
+  ProductListScreen.route: (_) =>
+      const AuthGate(requiredRole: 'customer', child: ProductListScreen()),
+  ProductDetailScreen.route: (_) =>
+      const AuthGate(requiredRole: 'customer', child: ProductDetailScreen()),
+  NotificationScreen.route: (_) => const AuthGate(child: NotificationScreen()),
+  EditProfileScreen.route: (_) => const AuthGate(child: EditProfileScreen()),
+  ReviewScreen.route: (_) =>
+      const AuthGate(requiredRole: 'customer', child: ReviewScreen()),
+  TipsScreen.route: (_) =>
+      const AuthGate(requiredRole: 'customer', child: TipsScreen()),
 };
 
 String dashboardRouteForRole(String role) => switch (role) {

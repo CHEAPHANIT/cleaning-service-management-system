@@ -19,6 +19,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   DateTime? date;
   TimeOfDay? time;
   String paymentMethod = 'Cash';
+  final Set<String> selectedExtras = <String>{};
   bool demoPaymentPaid = false;
   bool initialized = false;
 
@@ -60,6 +61,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       service: service,
       primaryUnits: bedrooms,
       secondaryUnits: bathrooms,
+      extras: selectedExtras.toList(growable: false),
     );
   }
 
@@ -70,6 +72,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       service: service,
       primaryUnits: bedrooms,
       secondaryUnits: bathrooms,
+      extras: selectedExtras.toList(growable: false),
     );
   }
 
@@ -92,8 +95,22 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
   void _selectService(ServiceModel service) {
     setState(() {
-      if (selectedService?.id != service.id) _applyServiceDefaults(service);
+      if (selectedService?.id != service.id) {
+        _applyServiceDefaults(service);
+        selectedExtras.clear();
+      }
       selectedService = service;
+    });
+  }
+
+  void _toggleExtra(String extra, bool selected) {
+    setState(() {
+      if (selected) {
+        selectedExtras.add(extra);
+      } else {
+        selectedExtras.remove(extra);
+      }
+      demoPaymentPaid = false;
     });
   }
 
@@ -125,7 +142,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       bathrooms: bathrooms,
       bookingDate: DateFormat('yyyy-MM-dd').format(date!),
       bookingTime: time!.format(context),
-      extraServices: const [],
+      extraServices: selectedExtras.toList(growable: false),
       specialInstruction: note.text.trim(),
       paymentMethod: paymentMethod == 'KHQR' && !PaymentConfig.khqrConfigured
           ? 'Demo QR (Paid)'
@@ -186,6 +203,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                     propertyType: propertyType,
                     bedrooms: bedrooms,
                     bathrooms: bathrooms,
+                    selectedExtras: selectedExtras,
                     date: date,
                     time: time,
                     address: address,
@@ -197,6 +215,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                         setState(() => bedrooms = value),
                     onBathroomsChanged: (value) =>
                         setState(() => bathrooms = value),
+                    onExtraChanged: _toggleExtra,
                     onDateChanged: (value) => setState(() => date = value),
                     onTimeChanged: (value) => setState(() => time = value),
                     onBack: previousStep,
@@ -212,6 +231,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                     date: date!,
                     time: time!,
                     address: address.text.trim(),
+                    selectedExtras: selectedExtras.toList(growable: false),
                     totalPrice: totalPrice,
                     paymentMethod: paymentMethod,
                     onPaymentChanged: (value) => setState(() {
@@ -624,28 +644,36 @@ double _bookingPriceForService({
   required ServiceModel service,
   required int primaryUnits,
   required int secondaryUnits,
+  List<String> extras = const [],
 }) {
   final type = '${service.name} ${service.category}'.toLowerCase();
+  final extraCharge = extras.fold<double>(
+    0,
+    (sum, extra) => sum + (PriceCalculator.extraPrices[extra] ?? 0),
+  );
   if (type.contains('sofa')) {
     return service.basePrice +
         math.max(0, primaryUnits - 1) * 12 +
-        math.max(0, secondaryUnits - 3) * 3;
+        math.max(0, secondaryUnits - 3) * 3 +
+        extraCharge;
   }
   if (type.contains('carpet')) {
     return service.basePrice +
         math.max(0, primaryUnits - 1) * 10 +
-        secondaryUnits * 5;
+        secondaryUnits * 5 +
+        extraCharge;
   }
   if (type.contains('office')) {
     return service.basePrice +
         math.max(0, primaryUnits - 1) * 8 +
-        math.max(0, secondaryUnits - 1) * 5;
+        math.max(0, secondaryUnits - 1) * 5 +
+        extraCharge;
   }
   return PriceCalculator.total(
     service.basePrice,
     primaryUnits,
     secondaryUnits,
-    const [],
+    extras,
   );
 }
 
@@ -653,28 +681,32 @@ int _bookingDurationForService({
   required ServiceModel service,
   required int primaryUnits,
   required int secondaryUnits,
+  List<String> extras = const [],
 }) {
   final type = '${service.name} ${service.category}'.toLowerCase();
   if (type.contains('sofa')) {
     return service.durationMinutes +
         math.max(0, primaryUnits - 1) * 30 +
-        math.max(0, secondaryUnits - 3) * 10;
+        math.max(0, secondaryUnits - 3) * 10 +
+        extras.length * 15;
   }
   if (type.contains('carpet')) {
     return service.durationMinutes +
         math.max(0, primaryUnits - 1) * 25 +
-        secondaryUnits * 15;
+        secondaryUnits * 15 +
+        extras.length * 15;
   }
   if (type.contains('office')) {
     return service.durationMinutes +
         math.max(0, primaryUnits - 1) * 20 +
-        math.max(0, secondaryUnits - 1) * 15;
+        math.max(0, secondaryUnits - 1) * 15 +
+        extras.length * 15;
   }
   return PriceCalculator.duration(
     service.durationMinutes,
     primaryUnits,
     secondaryUnits,
-    const [],
+    extras,
   );
 }
 
@@ -685,6 +717,7 @@ class _BookingDetailsStep extends StatelessWidget {
     required this.propertyType,
     required this.bedrooms,
     required this.bathrooms,
+    required this.selectedExtras,
     required this.date,
     required this.time,
     required this.address,
@@ -693,6 +726,7 @@ class _BookingDetailsStep extends StatelessWidget {
     required this.onPropertyChanged,
     required this.onBedroomsChanged,
     required this.onBathroomsChanged,
+    required this.onExtraChanged,
     required this.onDateChanged,
     required this.onTimeChanged,
     required this.onBack,
@@ -704,6 +738,7 @@ class _BookingDetailsStep extends StatelessWidget {
   final String propertyType;
   final int bedrooms;
   final int bathrooms;
+  final Set<String> selectedExtras;
   final DateTime? date;
   final TimeOfDay? time;
   final TextEditingController address;
@@ -712,6 +747,7 @@ class _BookingDetailsStep extends StatelessWidget {
   final ValueChanged<String> onPropertyChanged;
   final ValueChanged<int> onBedroomsChanged;
   final ValueChanged<int> onBathroomsChanged;
+  final void Function(String extra, bool selected) onExtraChanged;
   final ValueChanged<DateTime> onDateChanged;
   final ValueChanged<TimeOfDay> onTimeChanged;
   final VoidCallback onBack;
@@ -777,6 +813,11 @@ class _BookingDetailsStep extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 18),
+        _BookingExtrasSelector(
+          selected: selectedExtras,
+          onChanged: onExtraChanged,
         ),
         const SizedBox(height: 18),
         _BookingDateField(date: date, onChanged: onDateChanged),
@@ -858,6 +899,77 @@ class _PropertyTypeTile extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+class _BookingExtrasSelector extends StatelessWidget {
+  const _BookingExtrasSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final Set<String> selected;
+  final void Function(String extra, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'Extra Services (Optional)',
+        style: TextStyle(
+          color: Color(0xFF081C33),
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 4),
+      const Text(
+        'Select any additional cleaning tasks you need.',
+        style: TextStyle(color: Color(0xFF5A6F84), fontSize: 11),
+      ),
+      const SizedBox(height: 10),
+      for (final entry in PriceCalculator.extraPrices.entries)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: CheckboxListTile(
+            key: ValueKey('booking-extra-${entry.key}'),
+            value: selected.contains(entry.key),
+            onChanged: (value) => onChanged(entry.key, value ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+            dense: true,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: selected.contains(entry.key)
+                    ? const Color(0xFF1488DD)
+                    : const Color(0xFFDDE6EE),
+              ),
+            ),
+            tileColor: selected.contains(entry.key)
+                ? const Color(0xFFEAF6FF)
+                : Colors.white,
+            activeColor: const Color(0xFF1488DD),
+            title: Text(
+              entry.key,
+              style: const TextStyle(
+                color: Color(0xFF081C33),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            secondary: Text(
+              '+${_adminMoney(entry.value)}',
+              style: const TextStyle(
+                color: Color(0xFF0783D5),
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+    ],
   );
 }
 
@@ -973,12 +1085,14 @@ class _BookingPickerField extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: const Color(0xFF081C33)),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF081C33),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF081C33),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -1040,12 +1154,14 @@ class _BookingTextArea extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: const Color(0xFF081C33)),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF081C33),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF081C33),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -1075,6 +1191,7 @@ class _BookingConfirmStep extends StatelessWidget {
     required this.date,
     required this.time,
     required this.address,
+    required this.selectedExtras,
     required this.totalPrice,
     required this.paymentMethod,
     required this.onPaymentChanged,
@@ -1091,6 +1208,7 @@ class _BookingConfirmStep extends StatelessWidget {
   final DateTime date;
   final TimeOfDay time;
   final String address;
+  final List<String> selectedExtras;
   final double totalPrice;
   final String paymentMethod;
   final ValueChanged<String> onPaymentChanged;
@@ -1146,6 +1264,12 @@ class _BookingConfirmStep extends StatelessWidget {
                   '${DateFormat('yyyy-MM-dd').format(date)} at ${time.format(context)}',
             ),
             _SummaryRow(label: 'Address', value: address),
+            _SummaryRow(
+              label: 'Extra Services',
+              value: selectedExtras.isEmpty
+                  ? 'None'
+                  : selectedExtras.join(', '),
+            ),
             const Divider(height: 26, color: Color(0xFFDDE6EE)),
             Row(
               children: [

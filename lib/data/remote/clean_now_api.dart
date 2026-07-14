@@ -255,6 +255,7 @@ class CleanNowApi {
       final response = await _dio.get(
         '/notifications',
         queryParameters: {'user_id': userId},
+        options: _authOptions,
       );
       return _list(response.data).map(NotificationModel.fromJson).toList();
     } on DioException {
@@ -263,13 +264,14 @@ class CleanNowApi {
   }
 
   Future<bool> markNotificationsRead(int userId) =>
-      _patch('/notifications/read-all', {'user_id': userId});
+      _patch('/notifications/read-all', {'user_id': userId}, auth: true);
 
   Future<List<FavoriteModel>?> favorites(int userId) async {
     try {
       final response = await _dio.get(
         '/favorites',
         queryParameters: {'user_id': userId},
+        options: _authOptions,
       );
       return _list(response.data).map(FavoriteModel.fromJson).toList();
     } on DioException {
@@ -278,13 +280,14 @@ class CleanNowApi {
   }
 
   Future<bool> toggleFavorite(FavoriteModel favorite) =>
-      _postOk('/favorites/toggle', favorite.toJson());
+      _postOk('/favorites/toggle', favorite.toJson(), auth: true);
 
   Future<List<Map<String, dynamic>>?> addresses(int userId) async {
     try {
       final response = await _dio.get(
         '/addresses',
         queryParameters: {'user_id': userId},
+        options: _authOptions,
       );
       return _list(response.data);
     } on DioException {
@@ -298,11 +301,15 @@ class CleanNowApi {
   ) => _postOk('/addresses/replace', {
     'user_id': userId,
     'addresses': addresses,
-  });
+  }, auth: true);
 
   Future<int?> addReview(ReviewModel review) async {
     try {
-      final response = await _dio.post('/reviews', data: review.toJson());
+      final response = await _dio.post(
+        '/reviews',
+        data: review.toJson(),
+        options: _authOptions,
+      );
       return (_map(response.data)['id'] as num).toInt();
     } on DioException {
       return null;
@@ -311,7 +318,10 @@ class CleanNowApi {
 
   Future<ReviewModel?> reviewForBooking(int bookingId) async {
     try {
-      final response = await _dio.get('/reviews/booking/$bookingId');
+      final response = await _dio.get(
+        '/reviews/booking/$bookingId',
+        options: _authOptions,
+      );
       return ReviewModel.fromJson(_map(response.data));
     } on DioException {
       return null;

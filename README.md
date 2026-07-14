@@ -4,7 +4,7 @@ CleanNow is a Flutter application for booking and managing home, office, and apa
 
 This README is written for non-technical readers who want to understand the project and technical readers who want to install, test, or extend it.
 
-> **Project notice:** CleanNow is a university/demo project. Authentication and role-based screens are implemented for demonstration, but the API does not currently issue access tokens or enforce production-grade authorization. Do not deploy it with real customer data or payments without adding server-side access control and a production payment provider.
+> **Project notice:** CleanNow is a university/demo project. The API issues signed bearer tokens and enforces role and ownership checks for protected workflows, but it has not received a production security review. Do not use real customer data or payments without hardened identity management, secure upload storage, secret rotation, monitoring, and a production payment provider.
 
 ## Table of Contents
 
@@ -275,9 +275,10 @@ Expected: shared changes persist while the API is running, products use remote/c
 ```powershell
 flutter analyze
 flutter test
+python -m unittest server.test_clean_now_api -v
 ```
 
-Tests cover pricing, validation, model persistence, booking privacy, booking-success navigation, promotions, address defaults, responsive cleaner screens, schedules, profiles, tracking, and documentation.
+Tests cover pricing and optional extras, validation, protected routes, model persistence, booking privacy, booking-success navigation, promotions, address defaults, responsive cleaner screens, schedules, profiles, tracking, and documentation. The Python integration test covers the complete customer registration, admin acceptance and assignment, cleaner completion, customer review, and ownership-protection workflow.
 
 Optional build checks:
 
@@ -286,7 +287,7 @@ flutter build web
 flutter build apk --debug
 ```
 
-The Python backend currently has no separate automated test suite. Explore endpoints through http://localhost:8080/docs.
+Explore and manually test individual API endpoints through http://localhost:8080/docs.
 
 ## Configuration
 
@@ -347,7 +348,7 @@ pubspec.yaml                       packages and SDK requirements
 | Notifications | `GET /api/notifications`, `PATCH /api/notifications/read-all` |
 | Products | `GET /api/products` |
 
-Production work should add token authentication and server-side role/ownership checks to protected endpoints.
+Protected endpoints require the bearer token returned by registration or login. Production work should harden the existing authentication design, rotate secrets, add rate limiting and audit logging, and use a production identity and payment strategy.
 
 ## Database Overview
 
