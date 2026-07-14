@@ -21,10 +21,10 @@
     { "name": "Products" }
   ],
   "paths": {
-    "/health": {
+    "/status": {
       "get": {
-        "tags": ["System"], "summary": "Check API health", "operationId": "getHealth",
-        "responses": { "200": { "description": "API and database are available", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } } } }
+        "tags": ["System"], "summary": "Check API status", "operationId": "getStatus",
+        "responses": { "200": { "description": "API and database are available", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } } }
       }
     },
     "/auth/register": {
@@ -205,7 +205,7 @@
       "DeletedResponse": { "description": "Deactivated", "content": { "application/json": { "schema": { "type": "object", "properties": { "deleted": { "type": "boolean" } } } } } }
     },
     "schemas": {
-      "Health": { "type": "object", "required": ["status", "database"], "properties": { "status": { "type": "string", "example": "ok" }, "database": { "type": "string" } } },
+      "Status": { "type": "object", "required": ["status", "database"], "properties": { "status": { "type": "string", "example": "ok" }, "database": { "type": "string" } } },
       "Error": { "type": "object", "required": ["error"], "properties": { "error": { "type": "string" } } },
       "Message": { "type": "object", "properties": { "message": { "type": "string" } } },
       "UserIdBody": { "type": "object", "required": ["user_id"], "properties": { "user_id": { "type": "integer", "minimum": 1 } } },

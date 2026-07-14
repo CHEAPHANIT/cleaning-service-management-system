@@ -147,7 +147,7 @@ Keep this terminal open. The API creates and seeds `server/cleannow_server.db` a
 
 | Check | Address | Expected result |
 | --- | --- | --- |
-| Health | http://localhost:8080/api/health | JSON containing `"status": "ok"` |
+| Status | http://localhost:8080/api/status | JSON containing `"status": "ok"` |
 | Swagger UI | http://localhost:8080/docs | Interactive API documentation |
 | OpenAPI | http://localhost:8080/openapi.json | OpenAPI 3 JSON document |
 
@@ -194,10 +194,10 @@ Follow this acceptance test from top to bottom with a new customer email.
 ### Step 0: Confirm the system is ready
 
 1. Start the API.
-2. Open http://localhost:8080/api/health.
+2. Open http://localhost:8080/api/status.
 3. Start Flutter and wait for onboarding or sign-in.
 
-Expected: the health endpoint reports `ok`, the app opens, and first-time users see onboarding.
+Expected: the status endpoint reports `ok`, the app opens, and first-time users see onboarding.
 
 ### Step 1: Register and sign in
 
@@ -334,7 +334,7 @@ pubspec.yaml                       packages and SDK requirements
 
 | Area | Main endpoints |
 | --- | --- |
-| Health | `GET /api/health` |
+| Status | `GET /api/status` |
 | Authentication | `POST /api/auth/register`, `/login`, `/reset-password` |
 | Users | `GET /api/users`, `POST /api/users/upsert`, `DELETE /api/users/{id}` |
 | Services | `GET/POST /api/services`, `DELETE /api/services/{id}` |
@@ -369,7 +369,7 @@ On mobile, local `cleannow.db` fallback data contains equivalent core tables plu
 ### The API is unavailable
 
 - Confirm `python server\clean_now_api.py` is running.
-- Open http://localhost:8080/api/health.
+- Open http://localhost:8080/api/status.
 - Check `CLEAN_NOW_API_URL`.
 - Use `10.0.2.2`, not `localhost`, from the Android emulator.
 

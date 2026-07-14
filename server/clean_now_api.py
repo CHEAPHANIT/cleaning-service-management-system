@@ -392,7 +392,7 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self.reply(500, {"error": "OpenAPI specification is unavailable"})
         with connect() as db:
-            if parsed.path == "/api/health":
+            if parsed.path == "/api/status":
                 return self.reply(200, {"status": "ok", "database": DB_PATH})
             if parsed.path.startswith("/api/demo-payments/"):
                 user = self.require_user(db, "customer")
