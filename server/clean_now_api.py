@@ -1,4 +1,4 @@
-"""CleanNow REST API backed by SQLite. Uses only Python's standard library."""
+"""CleanNow REST API backed by local SQLite or a remote Turso database."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -15,8 +15,15 @@ from urllib.request import urlopen
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
+try:
+    import libsql
+except ImportError:  # Local development continues to use Python's sqlite3.
+    libsql = None
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.getenv("CLEAN_NOW_DB", os.path.join(ROOT, "cleannow_server.db"))
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "").strip()
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "").strip()
 HOST = os.getenv("CLEAN_NOW_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLEAN_NOW_PORT", "8080"))
 OPENAPI_PATH = os.path.join(ROOT, "openapi.json")
@@ -38,7 +45,7 @@ SWAGGER_UI = """<!doctype html>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
     window.onload = () => SwaggerUIBundle({
-      url: '/openapi.json',
+      url: '/api/openapi.json',
       dom_id: '#swagger-ui',
       deepLinking: true,
       displayRequestDuration: true,
@@ -55,9 +62,24 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def dict_row(cursor, row):
+    return {column[0]: row[index] for index, column in enumerate(cursor.description)}
+
+
 def connect():
+    if TURSO_DATABASE_URL:
+        if libsql is None:
+            raise RuntimeError(
+                "The libsql package is required when TURSO_DATABASE_URL is set"
+            )
+        db = libsql.connect(
+            database=TURSO_DATABASE_URL,
+            auth_token=TURSO_AUTH_TOKEN,
+        )
+        db.row_factory = dict_row
+        return db
     db = sqlite3.connect(DB_PATH, timeout=10)
-    db.row_factory = sqlite3.Row
+    db.row_factory = dict_row
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
     return db
@@ -353,7 +375,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
-        demo_match = re.fullmatch(r"/demo-pay/([A-Za-z0-9_-]+)(/success)?", parsed.path)
+        demo_match = re.fullmatch(
+            r"(?:/api)?/demo-pay/([A-Za-z0-9_-]+)(/success)?",
+            parsed.path,
+        )
         if demo_match:
             payment_id, success = demo_match.group(1), demo_match.group(2)
             with connect() as db:
@@ -381,11 +406,14 @@ class Handler(BaseHTTPRequestHandler):
                     <body style=\"font-family:Arial;background:#f2fbf7;margin:0;padding:32px;text-align:center\"><main style=\"max-width:420px;margin:auto;background:white;padding:32px;border-radius:18px;border:1px solid #ccebdd\"><div style=\"font-size:64px\">&#10003;</div><h1 style=\"color:#07824f\">Payment successful</h1><p>This is a simulated CleanNow payment.</p><h2>${amount}</h2><p>Reference: {safe_id}</p><p>You may return to the CleanNow app.</p></main></body></html>"""
                 else:
                     page = f"""<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width\"><title>CleanNow demo payment</title></head>
-                    <body style=\"font-family:Arial;background:#f3f7fb;margin:0;padding:32px;text-align:center\"><main style=\"max-width:420px;margin:auto;background:white;padding:32px;border-radius:18px;border:1px solid #dce6ee\"><div style=\"font-size:56px\">&#128179;</div><h1>Demo payment</h1><p>No real money will be transferred.</p><h2>${amount}</h2><p>Reference: {safe_id}</p><a href=\"/demo-pay/{safe_id}/success\" style=\"display:block;background:#168bdb;color:white;text-decoration:none;padding:15px;border-radius:12px;font-weight:bold\">Confirm demo payment</a></main></body></html>"""
+                    <body style=\"font-family:Arial;background:#f3f7fb;margin:0;padding:32px;text-align:center\"><main style=\"max-width:420px;margin:auto;background:white;padding:32px;border-radius:18px;border:1px solid #dce6ee\"><div style=\"font-size:56px\">&#128179;</div><h1>Demo payment</h1><p>No real money will be transferred.</p><h2>${amount}</h2><p>Reference: {safe_id}</p><a href=\"/api/demo-pay/{safe_id}/success\" style=\"display:block;background:#168bdb;color:white;text-decoration:none;padding:15px;border-radius:12px;font-weight:bold\">Confirm demo payment</a></main></body></html>"""
                 return self.reply_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
-        if parsed.path in ("/docs", "/docs/", "/swagger", "/swagger/"):
+        if parsed.path in (
+            "/docs", "/docs/", "/swagger", "/swagger/",
+            "/api/docs", "/api/docs/", "/api/swagger", "/api/swagger/",
+        ):
             return self.reply_bytes(200, SWAGGER_UI.encode("utf-8"), "text/html; charset=utf-8")
-        if parsed.path == "/openapi.json":
+        if parsed.path in ("/openapi.json", "/api/openapi.json"):
             try:
                 with open(OPENAPI_PATH, "rb") as spec:
                     return self.reply_bytes(200, spec.read(), "application/json; charset=utf-8")
@@ -393,7 +421,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(500, {"error": "OpenAPI specification is unavailable"})
         with connect() as db:
             if parsed.path == "/api/status":
-                return self.reply(200, {"status": "ok", "database": DB_PATH})
+                return self.reply(200, {
+                    "status": "ok",
+                    "database": "turso" if TURSO_DATABASE_URL else DB_PATH,
+                })
             if parsed.path.startswith("/api/demo-payments/"):
                 user = self.require_user(db, "customer")
                 if user is None:
@@ -559,7 +590,7 @@ class Handler(BaseHTTPRequestHandler):
                     "id": payment_id,
                     "amount": amount,
                     "status": "pending",
-                    "payment_url": f"{public_base}/demo-pay/{payment_id}",
+                    "payment_url": f"{public_base}/api/demo-pay/{payment_id}",
                 })
             if parsed.path in ("/api/auth/register", "/api/auth/register-customer"):
                 email = data.get("email", "").strip().lower()
