@@ -111,20 +111,52 @@ CleanNow contains three connected portals:
 
 ### Central service workflow
 
-```text
-Customer chooses a service
-          ↓
-Customer enters date, address, property, extras, and payment method
-          ↓
-System calculates the price and creates a Pending booking
-          ↓
-Administrator reviews, accepts, and assigns an available cleaner
-          ↓
-Cleaner updates: On the Way → Arrived → In Progress → Completed
-          ↓
-Customer reviews the completed service
-          ↓
-Administrator uses the result for operational and financial reporting
+The following user flow shows how a booking moves between the customer, the system, the administrator, and the cleaner.
+
+```mermaid
+flowchart TD
+    Start([Customer opens CleanNow]) --> Browse[Browse and choose a cleaning service]
+    Browse --> Details[Enter schedule, address, property details, extras, and payment method]
+    Details --> Valid{Are the booking details valid?}
+
+    Valid -- No --> Correct[Show validation message and correct the details]
+    Correct --> Details
+    Valid -- Yes --> Calculate[System calculates price and estimated duration]
+    Calculate --> Pending[Create booking with Pending status]
+    Pending --> Review[Administrator reviews the booking]
+
+    Review --> Decision{Accept the booking?}
+    Decision -- No --> Rejected[Reject booking and notify customer]
+    Rejected --> EndRejected([Booking closed])
+    Decision -- Yes --> Available{Is a cleaner available?}
+    Available -- No --> Waiting[Keep booking waiting for assignment]
+    Waiting --> Available
+    Available -- Yes --> Assign[Administrator assigns a cleaner]
+
+    Assign --> Notify[System notifies customer and cleaner]
+    Notify --> OnWay[Cleaner: On the Way]
+    OnWay --> Arrived[Cleaner: Arrived]
+    Arrived --> Progress[Cleaner: In Progress]
+    Progress --> Complete[Cleaner adds documentation and marks Completed]
+
+    Complete --> CustomerUpdate[Customer receives completion update]
+    CustomerUpdate --> ReviewChoice{Leave a review?}
+    ReviewChoice -- Yes --> Rating[Customer submits rating and comment]
+    ReviewChoice -- No --> Reporting[Administrator views operational and financial results]
+    Rating --> Reporting
+    Reporting --> End([Service workflow completed])
+
+    classDef customer fill:#EAF6FF,stroke:#168BDB,color:#0F172A,stroke-width:2px
+    classDef admin fill:#FFF3D6,stroke:#D98B00,color:#0F172A,stroke-width:2px
+    classDef cleaner fill:#E8F7EE,stroke:#24965A,color:#0F172A,stroke-width:2px
+    classDef system fill:#F1EDFF,stroke:#7656C9,color:#0F172A,stroke-width:2px
+    classDef decision fill:#FFFFFF,stroke:#64748B,color:#0F172A,stroke-width:2px
+
+    class Start,Browse,Details,Correct,CustomerUpdate,ReviewChoice,Rating customer
+    class Review,Decision,Rejected,Assign,Reporting admin
+    class OnWay,Arrived,Progress,Complete cleaner
+    class Calculate,Pending,Available,Waiting,Notify,EndRejected,End system
+    class Valid,Decision,Available,ReviewChoice decision
 ```
 
 ## 8. Feature Brainstorm
@@ -342,58 +374,3 @@ The recommended starting model is a clear commission or service margin because i
 | Hosted database | Turso/libSQL | SQLite-compatible database suitable for serverless access |
 | Hosting | Vercel | Web and serverless API deployment from GitHub |
 | Documentation | OpenAPI and Swagger | Discoverable and testable endpoint definitions |
-
-## 18. Research and Validation Plan
-
-Before treating CleanNow as a commercial product, interview at least:
-
-- 5–10 people who have previously hired a cleaner
-- 3–5 cleaners or cleaning staff
-- 2–3 cleaning-business managers
-
-Suggested interview questions:
-
-1. How do you currently arrange or receive cleaning work?
-2. What information is commonly missing or misunderstood?
-3. What makes you trust or reject a provider?
-4. Which part of scheduling causes the most difficulty?
-5. How do you decide whether a price is fair?
-6. Which progress updates are actually useful?
-7. Would before/after photos improve trust or create privacy concerns?
-8. Which payment methods do you prefer?
-9. What would make you use the service repeatedly?
-
-Use the answers to revise the feature priority rather than assuming every brainstormed feature is necessary.
-
-## 19. Open Questions
-
-- Is CleanNow the cleaning provider, or a marketplace connecting independent cleaners?
-- Who is responsible for damage, cancellation, refunds, and customer support?
-- How should cleaner pay and platform commission be calculated?
-- Should customers choose a specific cleaner or allow automatic assignment?
-- Which locations and service types should be supported first?
-- How far in advance can customers book or cancel?
-- What proof is required before approving a cleaner?
-- Should photos be mandatory, optional, or restricted for privacy?
-- Which languages and currencies are required for the first real market?
-- What data-retention period is appropriate for accounts, bookings, and photos?
-
-## 20. Recommended Project Definition
-
-For the current academic project, use this final definition:
-
-> **CleanNow is a web and mobile cleaning service booking and management system designed for customers, cleaners, and administrators. It digitalizes service discovery, price calculation, booking, cleaner assignment, job tracking, completion documentation, reviews, and business reporting. The project demonstrates how a shared full-stack system can reduce manual coordination and improve transparency across the complete cleaning-service workflow.**
-
-## 21. Suggested Presentation Summary
-
-When presenting the project, explain it in this order:
-
-1. **Problem:** Cleaning bookings are often manually coordinated and unclear.
-2. **Users:** Customers, cleaners, and administrators have different but connected needs.
-3. **Solution:** CleanNow gives each role a dedicated portal using shared booking data.
-4. **Demonstration:** Customer books, admin assigns, cleaner completes, customer reviews.
-5. **Technology:** Flutter, Provider, Dio, Python REST API, SQLite/Turso, and Vercel.
-6. **Value:** Faster booking, clearer operations, better tracking, and useful business data.
-7. **Limitation:** Security and real payments must be strengthened before production use.
-8. **Future:** Verified payments, notifications, maps, recurring bookings, and intelligent matching.
-
