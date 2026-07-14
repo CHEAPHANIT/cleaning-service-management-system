@@ -89,7 +89,7 @@ class DictCursor:
         return [self._convert(row) for row in self._cursor.fetchall()]
 
     def __iter__(self):
-        for row in self._cursor:
+        for row in self._cursor.fetchall():
             yield self._convert(row)
 
 
