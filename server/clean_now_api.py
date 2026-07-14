@@ -66,18 +66,85 @@ def dict_row(cursor, row):
     return {column[0]: row[index] for index, column in enumerate(cursor.description)}
 
 
+class DictCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    @property
+    def lastrowid(self):
+        return self._cursor.lastrowid
+
+    def _convert(self, row):
+        if row is None or isinstance(row, dict):
+            return row
+        if hasattr(row, "keys"):
+            return dict(row)
+        columns = [column[0] for column in (self._cursor.description or ())]
+        return dict(zip(columns, row))
+
+    def fetchone(self):
+        return self._convert(self._cursor.fetchone())
+
+    def fetchall(self):
+        return [self._convert(row) for row in self._cursor.fetchall()]
+
+    def __iter__(self):
+        for row in self._cursor:
+            yield self._convert(row)
+
+
+class DictConnection:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def execute(self, sql, parameters=()):
+        return DictCursor(self._connection.execute(sql, parameters))
+
+    def executemany(self, sql, parameters):
+        return DictCursor(self._connection.executemany(sql, parameters))
+
+    def executescript(self, script):
+        if hasattr(self._connection, "executescript"):
+            return self._connection.executescript(script)
+        for statement in script.split(";"):
+            if statement.strip():
+                self._connection.execute(statement)
+
+    def commit(self):
+        return self._connection.commit()
+
+    def rollback(self):
+        return self._connection.rollback()
+
+    def close(self):
+        return self._connection.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, error_type, error, traceback):
+        try:
+            if error_type is None:
+                self.commit()
+            else:
+                self.rollback()
+        finally:
+            self.close()
+        return False
+
+
 def connect():
     if TURSO_DATABASE_URL:
         if libsql is None:
             raise RuntimeError(
                 "The libsql package is required when TURSO_DATABASE_URL is set"
             )
-        db = libsql.connect(
-            database=TURSO_DATABASE_URL,
-            auth_token=TURSO_AUTH_TOKEN,
+        return DictConnection(
+            libsql.connect(
+                database=TURSO_DATABASE_URL,
+                auth_token=TURSO_AUTH_TOKEN,
+            )
         )
-        db.row_factory = dict_row
-        return db
     db = sqlite3.connect(DB_PATH, timeout=10)
     db.row_factory = dict_row
     db.execute("PRAGMA journal_mode=WAL")
