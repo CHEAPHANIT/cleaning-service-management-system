@@ -367,10 +367,13 @@ def user_dict(row):
     return data
 
 
-def cleaner_application_dict(row):
+def cleaner_application_dict(row, include_documents=True):
     data = row_dict(row)
     if data:
         data.pop("password_hash", None)
+        if not include_documents:
+            data["profile_photo"] = ""
+            data["id_document"] = ""
     return data
 
 
@@ -813,7 +816,13 @@ class Handler(BaseHTTPRequestHandler):
                 ))
                 notify_admins(db, "Cleaner application", f"{data.get('full_name', 'A cleaner')} applied to join CleanNow.")
                 row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (cursor.lastrowid,)).fetchone()
-                return self.reply(201, cleaner_application_dict(row))
+                # The images are already stored. Avoid echoing the large base64
+                # documents to the applicant, which can cause a client timeout
+                # after an otherwise successful insert.
+                return self.reply(
+                    201,
+                    cleaner_application_dict(row, include_documents=False),
+                )
             if parsed.path == "/api/admin/cleaners":
                 admin = self.require_user(db, "admin")
                 if admin is None:

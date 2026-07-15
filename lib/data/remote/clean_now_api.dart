@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../core/errors.dart';
 import '../models/models.dart';
 
 /// REST client for the shared CleanNow SQLite server.
@@ -14,8 +15,8 @@ class CleanNowApi {
             'CLEAN_NOW_API_URL',
             defaultValue: 'http://localhost:8080/api',
           ),
-          connectTimeout: const Duration(seconds: 2),
-          receiveTimeout: const Duration(seconds: 3),
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 20),
           headers: const {'Content-Type': 'application/json'},
         ),
       );
@@ -80,8 +81,12 @@ class CleanNowApi {
         data: application.toJson(),
       );
       return CleanerApplicationModel.fromJson(_map(response.data));
-    } on DioException {
-      return null;
+    } on DioException catch (error) {
+      final message = _apiError(error);
+      if (message != null) throw ValidationException(message);
+      throw NetworkException(
+        'The application server did not respond. Please try again.',
+      );
     }
   }
 
@@ -453,6 +458,15 @@ class CleanNowApi {
 
   Map<String, dynamic>? _mapOrNull(dynamic value) {
     if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
+  String? _apiError(DioException error) {
+    final message = _mapOrNull(error.response?.data)?['error']?.toString();
+    if (message != null && message.trim().isNotEmpty) return message;
+    if (error.response?.statusCode == 413) {
+      return 'The selected images are too large. Choose smaller images and try again.';
+    }
     return null;
   }
 

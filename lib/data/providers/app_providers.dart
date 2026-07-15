@@ -620,7 +620,6 @@ class AdminDataProvider extends ChangeNotifier {
     CleanerApplicationModel application,
   ) async {
     await database.saveCleanerApplication(application);
-    await load();
   }
 
   Future<void> addCleanerFromApplication(

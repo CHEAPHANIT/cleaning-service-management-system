@@ -67,6 +67,31 @@ class CleanNowApiWorkflowTest(unittest.TestCase):
             finally:
                 error.close()
 
+    def test_cleaner_application_response_does_not_echo_documents(self):
+        status, application = self.request(
+            "POST",
+            "/cleaner-applications",
+            {
+                "full_name": "Public Applicant",
+                "email": "public.applicant@example.com",
+                "phone": "+855 12 000 001",
+                "password": "cleaner123",
+                "gender": "Prefer not to say",
+                "address": "Phnom Penh",
+                "work_experience": "Two years of home cleaning",
+                "skills": "Home Cleaning",
+                "available_days": "Monday",
+                "available_time": "8:00 AM - 5:00 PM",
+                "profile_photo": "data:image/jpeg;base64,profile-data",
+                "id_document": "data:image/jpeg;base64,id-data",
+            },
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(application["status"], "pending")
+        self.assertEqual(application["profile_photo"], "")
+        self.assertEqual(application["id_document"], "")
+
     def test_complete_customer_admin_cleaner_review_workflow(self):
         status, customer_auth = self.request(
             "POST",
