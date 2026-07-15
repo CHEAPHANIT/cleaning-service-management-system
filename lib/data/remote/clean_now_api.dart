@@ -80,7 +80,13 @@ class CleanNowApi {
         '/cleaner-applications',
         data: application.toJson(),
       );
-      return CleanerApplicationModel.fromJson(_map(response.data));
+      final body = _mapOrNull(response.data);
+      if (body == null) {
+        throw ServerException(
+          'The application may have been saved, but the server returned an invalid response. Check the admin queue before trying again.',
+        );
+      }
+      return CleanerApplicationModel.fromJson(body);
     } on DioException catch (error) {
       final message = _apiError(error);
       if (message != null) throw ValidationException(message);

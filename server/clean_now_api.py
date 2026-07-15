@@ -803,7 +803,7 @@ class Handler(BaseHTTPRequestHandler):
                 if db.execute("SELECT id FROM cleaner_applications WHERE lower(email)=? AND status='pending'", (email,)).fetchone():
                     return self.reply(409, {"error": "A pending application already exists for this email"})
                 stamp = now()
-                cursor = db.execute("""
+                db.execute("""
                   INSERT INTO cleaner_applications(full_name,email,phone,gender,address,work_experience,skills,available_days,available_time,profile_photo,id_document,status,admin_note,password_hash,created_at,updated_at)
                   VALUES(?,?,?,?,?,?,?,?,?,?,?,'pending','',?,?,?)
                 """, (
@@ -815,7 +815,22 @@ class Handler(BaseHTTPRequestHandler):
                     hash_password(password), stamp, stamp,
                 ))
                 notify_admins(db, "Cleaner application", f"{data.get('full_name', 'A cleaner')} applied to join CleanNow.")
-                row = db.execute("SELECT * FROM cleaner_applications WHERE id=?", (cursor.lastrowid,)).fetchone()
+                # libsql's remote cursor can report lastrowid as None even when
+                # the insert succeeded. Look the application up by the unique
+                # submission values instead of relying on that cursor field.
+                row = db.execute(
+                    """
+                    SELECT * FROM cleaner_applications
+                    WHERE lower(email)=? AND created_at=?
+                    ORDER BY id DESC LIMIT 1
+                    """,
+                    (email, stamp),
+                ).fetchone()
+                if row is None:
+                    return self.reply(
+                        500,
+                        {"error": "The application was saved but could not be reloaded"},
+                    )
                 # The images are already stored. Avoid echoing the large base64
                 # documents to the applicant, which can cause a client timeout
                 # after an otherwise successful insert.
